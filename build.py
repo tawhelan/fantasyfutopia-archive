@@ -41,7 +41,7 @@ table{border-collapse:collapse;display:block;overflow-x:auto}td,th{border:1px so
 footer{max-width:760px;margin:3rem auto;padding:0 16px;color:var(--mu);font:14px system-ui,sans-serif}"""
 def page(title, body, canon, meta=''):
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{html.escape(title)} – FantasyFutopia (archive)</title><link rel="canonical" href="{HOST}{canon}"><link rel="stylesheet" href="/style.css"></head>
+<title>{html.escape(title)} – FantasyFutopia (archive)</title><meta name="google-site-verification" content="-HsE7dGj4Tcs1q-zUxB7MEG7T3r_L9hL3H33froGLTc"><link rel="canonical" href="{HOST}{canon}"><link rel="stylesheet" href="/style.css"></head>
 <body><div class="banner">{BANNER}</div><header class="s"><a href="/">FantasyFutopia</a></header><main>{meta}{body}</main>
 <footer>FantasyFutopia, 2017–2019. Archived; no comments, forms or affiliate links.</footer></body></html>"""
 PROMO = re.compile(r'QR code|scan the|preview of my book|out now on Amazon|my book|on Amazon|Amazon Kindle|New players currently earn|sign-up (?:bonus|offer)|referral|promo code|click here to (?:sign|join|play)|not a DraftKings member|To sign up for an account',re.I)
