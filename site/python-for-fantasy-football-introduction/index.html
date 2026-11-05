@@ -1,0 +1,131 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Python for Fantasy Football – Introduction – FantasyFutopia (archive)</title><link rel="canonical" href="https://www.fantasyfutopia.com/python-for-fantasy-football-introduction/"><link rel="stylesheet" href="/style.css"></head>
+<body><div class="banner">This site is archived (2017–2019). Something new is coming.</div><header class="s"><a href="/">FantasyFutopia</a></header><main><h1>Python for Fantasy Football – Introduction</h1><p class="meta">2018-10-09</p><p>Welcome to the first article in the ‘Python for Fantasy Football’ series! Regular readers will be aware that I am a big advocate of using data to help better understand sports, and daily fantasy football lends itself particularly well to this type of analysis. Many of you are probably already familiar with spreadsheet software like Excel, and whilst that is very powerful it often lacks the flexibility and functionality that you can achieve by writing your own code. In this series I’ll be teaching you how to use the Python programming language to draw insights from data, make projections and use machine learning techniques to create your own xG models. Hopefully that sounds interesting already, but if you aren’t convinced that you should to learn to code, here are just a few quotes that might help change your mind:</p>
+<p>Welcome to the first article in the ‘Python for Fantasy Football’ series! Regular readers will be aware that I am a big advocate of using data to help better understand sports, and daily fantasy football lends itself particularly well to this type of analysis. Many of you are probably already familiar with spreadsheet software like Excel, and whilst that is very powerful it often lacks the flexibility and functionality that you can achieve by writing your own code. In this series I’ll be teaching you how to use the Python programming language to draw insights from data, make projections and use machine learning techniques to create your own xG models. Hopefully that sounds interesting already, but if you aren’t convinced that you should to learn to code, here are just a few quotes that might help change your mind:</p>
+<ul>
+<li>“Whether you want to uncover the secrets of the universe, or you just want to pursue a career in the 21st century, basic computer programming is an essential skill to learn.” <em>Steven Hawking, theoretical physicist.</em></li>
+<li>“Learning to write programs stretches your mind, and helps you think better, creates a way of thinking about things that I think is helpful in all domains.” <em>Bill Gates, co-founder of Microsoft.</em></li>
+<li>“I quickly came to understand that code is a superpower.” <em>Karlie Kloss, fashion model.</em></li>
+<li>“Coding is very important when you think about the future, where everything is going. With more phones and tablets and computers being made, and more people having access to every thing and information being shared, I think it’s very important to be able to learn the language of coding and programming.” <em>Chris Bosh, 11 time NBA all-star.</em></li>
+<li>“Whether we’re fighting climate change or going to space, everything is moved forward by computers, and we don’t have enough people who can code.” <em>Richard Branson, founder of Virgin Group.</em></li>
+<li>“I think that great programming is not all that dissimilar to great art. Once you start thinking in concepts of programming it makes you a better person – as does learning a foreign language, as does learning math, as does learning how to read.” <em>Jack Dorsey, creator of Twitter.</em></li>
+<li>“Learning to code gives you a completely new perspective when you look at a computer. Before, you think of it as an appliance, like a fridge, accepting what it can do. After, you know that you can code that computer to do anything you can imagine it doing.” <em>Tim Berners Lee, inventor of the World Wide Web.</em></li>
+</ul>
+<p>And, of course:</p>
+
+<p>Now that you want to learn to code (I hope!), you need to choose a language. The most useful discipline for sports analytics is data science, with the most popular languages being Python and R. I have used both and personally prefer Python, so I will be focusing on that throughout this series. You shouldn’t need any previous programming experience to follow along, but you will need to install Python before we go any further. To do so, I recommend downloading <a href="https://www.anaconda.com/download/">Anaconda for Python 3</a>, which already comes pre-loaded with the most popular data science libraries and tools you will need. You can find a step-by-step guide on how to install Anaconda on Windows <a class="broken_link" href="https://medium.com/@GalarnykMichael/install-python-on-windows-anaconda-c63c7c3d1444">here</a> and Mac <a class="broken_link" href="https://medium.com/@GalarnykMichael/install-python-on-mac-anaconda-ccd9f2014072">here</a>, as well as in the Anaconda documentation itself <a href="https://docs.anaconda.com/anaconda/install/">here</a>. Once installed, open up a Jupyter notebook either via the shortcut created during the Anaconda installation process, or by typing jupyter notebook into the command prompt. Jupyter notebooks provide a nice environment to allow you to write, test and edit code. You can either create a new notebook file to follow along with this article, or download the one I made earlier via <a href="https://github.com/twhelan22/python-for-fantasy-football">Github</a>. I’m going to focus on examples here rather than explaining everything in loads of detail, so if you do want to go more in-depth I suggest heading to some of the links in the ‘Conclusion’ section. Keep in mind that a huge part of being a good programmer is just learning how to adapt existing code to your particular needs, so if you get stuck at any point just Google it! The vast majority of the time you will find out that someone has already asked the same question on <a class="broken_link" href="https://stackoverflow.com/">stackoverflow.com</a>.</p>
+<h1>Your first Python notebook</h1>
+<p>For the first part of the series, we’re going to look at some expected goals data to see if we can identify which teams have been over or under-performing xG. The data we will be using is for the first 8 games of the 2018-2019 EPL season; for now we will be using xG numbers from understat.com, but later in the series I will show you how you can create your own xG models. Getting data in the first place can be tricky at the best of times, so I have provided a csv file containing the data that can be downloaded from my Github account <a href="https://github.com/twhelan22/python-for-fantasy-football">here</a>. This exercise will teach you the basics of the pandas library for data-frames, as well as some basic plotting with matplotlib and seaborn.</p>
+<h2>Reading the data</h2>
+<p>First, we need to import the pandas library and load the data. By convention, the pandas library is imported as ‘pd’, so any pandas methods (e.g. ‘read_csv()’) can be called via the pd prefix. However, if you fancy doing the whole ‘Hello, World!’ thing before that, go ahead! To run a code cell in a Jupyter notebook, either press the triangular ‘play’ icon or press ‘shift + enter’ on your keyboard.</p>
+<pre><pre class="brush: python; title: ; notranslate" title="">
+# Optional hello world (https://en.wikipedia.org/wiki/%22Hello,_World!%22_program)
+print('Hello, World!')
+</pre></pre>
+<pre><pre class="brush: python; title: ; notranslate" title="">
+# Import the pandas library
+import pandas as pd
+
+# Read the data from a csv file and save it as a pandas dataframe named 'xg_data'
+# Replace the file path with the location on your computer where the csv file is saved (in my case it's in D:/Tom/Downloads/)
+xg_data = pd.read_csv('D:/Tom/Downloads/epl_xg.csv')
+
+# Take a look at the data
+xg_data
+</pre></pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/xg_data.png"/></p>
+<p>Right now the data looks pretty much how it would do in a spreadsheet, with the exception of the numbered ‘index’ column on the far left. With a small dataset like this we can see every row pretty easily, but with larger datasets you are likely to want to use the head and tail methods to get an idea of what the data looks like:</p>
+<pre><pre class="brush: python; title: ; notranslate" title="">
+# Show the first 3 rows of the data
+xg_data.head(3)
+</pre></pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/first_3_rows.png"/></p>
+<pre><pre class="brush: python; title: ; notranslate" title="">
+# Show the last 7 rows of the data
+xg_data.tail(7)
+</pre></pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/last_7_rows.png"/></p>
+<h2>Filtering and summarising</h2>
+<p>You can also filter and summarise the data using more specific queries:</p>
+<pre><pre class="brush: python; title: ; notranslate" title="">
+# Show the data for Leicester (note that 'is equal to' is written as '==' instead of '=')
+# The code below essentially reads as 'show the xg_data dataframe where the 'Team' column is equal to 'Leicester'
+# Because Leicester is a string, you need to write it using either single or double quotes
+xg_data[xg_data['Team'] == 'Leicester']
+</pre></pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/leicester.png"/></p>
+<pre><pre class="brush: python; title: ; notranslate" title="">
+# Filter the rows where goals scored is greater than or equal to 15, and save the result in a new dataframe
+# Note that in this case because 15 is an integer, we don't need to use quotes
+# For more information about data types, see https://realpython.com/python-data-types/
+high_scorers = xg_data[xg_data['G'] &amp;amp;gt;= 15]
+high_scorers
+</pre></pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/high_scorers.png"/></p>
+<pre><pre class="brush: python; title: ; notranslate" title="">
+# Print a list of the teams that have scored at least 15 goals
+print(list(high_scorers['Team']))
+</pre></pre>
+<p>[‘Arsenal’,  ‘Bournemouth’,  ‘Chelsea’,  ‘Liverpool’,  ‘Manchester City’,  ‘Tottenham’]</p>
+<pre><pre class="brush: python; title: ; notranslate" title="">
+# Show some summary statistics for each column in the original dataframe
+xg_data.describe()
+</pre></pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/summary_stats.png"/></p>
+<h2>Adding columns</h2>
+<p>It’s likely that you’re going to want to add extra columns to your data containing additional information. Let’s add columns for goal difference, expected goal difference and non-penalty expected goal difference, and then sort the data by NPxGD:</p>
+<pre><pre class="brush: python; title: ; notranslate" title="">
+# Add new columns for goal difference, expected goal difference and non-penalty expected goal difference
+xg_data['GD'] = xg_data['G'] - xg_data['GA']
+xg_data['xGD'] = xg_data['xG'] - xg_data['xGA']
+xg_data['NPxGD'] = xg_data['NPxG'] - xg_data['NPxGA']
+
+# Order the teams by NPxGD to help give an idea of who the good and bad teams are currently
+xg_data = xg_data.sort_values(by=['NPxGD'], ascending=False)
+xg_data
+</pre></pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/xg_data_new_columns.png"/></p>
+<p>Manchester City and Liverpool unsurprisingly lead the way so far, with Wolves and Bournemouth keeping pace with Chelsea and Spurs in the early going. The teams at the bottom of this dataframe have been poor, but there are a couple of teams in the middle that stand out for different reasons. Let’s take a look at who has been over or under-performing xG to make it easier to spot these teams.</p>
+<h2>Plotting</h2>
+<p>To get a much clearer picture of what the data is telling us, it’s a good idea to generate a plot or two. In this case we will create a horizontal bar plot (barh) using matplotlib to look at goal difference vs expected goal difference:</p>
+<pre><pre class="brush: python; title: ; notranslate" title="">
+# Take a look at who has been overperforming or underperforming so far
+xg_data['GD_vs_xGD'] = xg_data['GD'] - xg_data['xGD']
+xg_data = xg_data.sort_values(by=['GD_vs_xGD'], ascending=False)
+
+# Import the matplotlib library to use for plotting
+from matplotlib import pyplot as plt
+
+# Create a horizontal bar chart to help visualise the teams that have been overperforming or underperforming in terms of GD vs xGD
+plt.barh(xg_data['Team'], xg_data['GD_vs_xGD'])
+
+# Show the plot
+plt.show()
+</pre></pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/xg_vs_gd.png"/></p>
+<p>The plot shows that Arsenal have been significantly over-performing in terms of xGD, whereas Cardiff have been under-performing. However, this isn’t exactly a very good looking plot to say the least… Whilst Arsenal and Cardiff clearly stand out, it’s hard to make comparisons between most of the other teams due to the ordering, and it’s also quite small. Fortunately there is a different plotting library, seaborn, which allows us to easily create much more aesthetically pleasing plots.</p>
+<pre><pre class="brush: python; title: ; notranslate" title="">
+# Import seaborn to help create more visually appealing plots; see https://seaborn.pydata.org/introduction.html#introduction for more information
+import seaborn as sns
+
+# Set the plot style and colour palette to use (remember dodgy spelling if you're from the UK!)
+sns.set(style='whitegrid')
+sns.set_color_codes('muted')
+
+# Initialize the matplotlib figure (f) and axes (ax), and set width and height of the plot
+f, ax = plt.subplots(figsize=(12, 10))
+
+# Create the plot, choosing the variables for each axis, the data source and the colour (b = blue)
+sns.barplot(x='GD_vs_xGD', y='Team', data=xg_data, color='b')
+
+# Rename the axes, setting y axis label to be blank
+ax.set(ylabel='', xlabel='Difference in GD vs xGD')
+
+# Remove the borders from the plot
+sns.despine(left=True, bottom=True)
+</pre></pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/xg_vs_gd_seaborn.png"/></p>
+<p>Much better! xG isn’t perfect, but based on this graph it also looks like Chelsea and of course Burnley have been fortunate so far, whereas Southampton and Huddersfield have perhaps been a bit unlucky. Newcastle fans probably won’t be pleased to see that their goal difference is pretty much bang on with expected, although they have had a very tough schedule to begin the season. Feel free to continue playing around with the data on your own to see what other interesting bits of information you can find (e.g. are Arsenal running good in attack, defense, or both?).</p>
+<h1>Conclusion</h1>
+<p>We barely scratched the surface in this article, but hopefully you are starting to get an idea of the Python syntax, as well as a sense of how powerful it can be. I wanted to keep this fairly brief, but if you have time I highly recommend taking a free introductory course to get even more familiar with the basics, for example the one by DataCamp <a class="broken_link" href="https://www.datacamp.com/courses/intro-to-python-for-data-science">here</a>. In the next part, I’ll go through how to adjust stats for a specific matchup by creating functions in Python, which will give you a starting point to create your own projections. If you enjoyed this article, please share it on social media and be sure to look out for the next part!</p></main>
+<footer>FantasyFutopia, 2017–2019. Archived; no comments, forms or affiliate links.</footer></body></html>

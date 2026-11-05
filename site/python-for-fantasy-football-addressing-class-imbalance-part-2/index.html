@@ -1,0 +1,396 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Python for Fantasy Football – Addressing Class Imbalance Part 2 – FantasyFutopia (archive)</title><link rel="canonical" href="https://www.fantasyfutopia.com/python-for-fantasy-football-addressing-class-imbalance-part-2/"><link rel="stylesheet" href="/style.css"></head>
+<body><div class="banner">This site is archived (2017–2019). Something new is coming.</div><header class="s"><a href="/">FantasyFutopia</a></header><main><h1>Python for Fantasy Football – Addressing Class Imbalance Part 2</h1><p class="meta">2019-02-03</p><p>Welcome to part 7 of my ‘Python for Fantasy Football’ series! <a href="/python-for-fantasy-football-addressing-class-imbalance-in-machine-learning/">Part 6</a> outlined some strategies for dealing with imbalanced datasets. Since publishing that article I’ve been diving into the topic further, and I think it’s worth writing a follow-up before we move on. One of the comments from <a href="/python-for-fantasy-football-addressing-class-imbalance-in-machine-learning/">part 6</a> was as follows:</p>
+
+<p>I was surprised by this as well, but at the time I didn’t think much of it, as I had heard that SMOTE re-sampling was often the go-to solution for dealing with class imbalance. However, we really should try to understand exactly what is going on here before we start celebrating!</p>
+<p>If you haven’t worked through the previous articles/Jupyter notebooks or you need a refresher, the links are below (machine learning starts at part 5):</p>
+<p><a href="/python-for-fantasy-football-introduction/">Part 1</a>, <a href="/python-for-fantasy-football-matchup-adjustment/">Part 2</a>, <a href="/python-for-fantasy-football-getting-and-cleaning-data/">Part 3</a>, <a href="/python-for-fantasy-football-apis-and-json-data/">Part 4</a>, <a href="/python-for-fantasy-football-introduction-to-machine-learning/">Part 5</a>, <a href="/python-for-fantasy-football-addressing-class-imbalance-in-machine-learning/">Part 6</a>, <a class="broken_link" href="https://github.com/twhelan22">GitHub (for notebooks)</a></p>
+<p><strong><em>Note: part 6 and 7 actually got a lot more technical than I’m comfortable with given that this is supposed to be an introductory series! I highly recommend working through the tutorials on </em><a href="https://www.kaggle.com/learn" rel="noreferrer noopener" target="_blank"><em>Kaggle</em></a><em> first before you carry on here. The last thing I want is for you to get put off machine learning just because I chose a much trickier example than I should have!</em></strong></p>
+<p>Before we get going I also wanted to thank everyone again for the great feedback I’ve been getting! Whilst most of it has been very positive, there have been a couple of comments that the articles are a bit too technical or difficult to understand. If you do feel that way there are plenty of other courses out there, so please give them a try before throwing in the towel! <a href="https://www.kaggle.com/learn/overview">Kaggle Learn</a> is a great introductory resource, and I highly recommend parts 1-7 of the ‘<a href="http://course18.fast.ai/ml">Introduction to Machine Learning for Coders</a>‘ from <a href="https://www.fast.ai/">fast.ai</a> if you want something more in-depth.</p>
+<h2 class="wp-block-heading">Using a re-sampled test set is cheating!</h2>
+<p>In <a href="/python-for-fantasy-football-addressing-class-imbalance-in-machine-learning/">part 6</a> we re-sampled the entire dataset before using cross-validation to test our model. However, there are a couple of big problems with this:</p>
+<ul><li>Our test set is no longer representative of the problem. Imagine we wanted to put this model into production and see how it performs on data from new matches that it hadn’t seen before. The new data would still be imbalanced! We would have trained and tested a model on balanced data, so it’s likely that the model wouldn’t generalise well to the new imbalanced data. It’s essential that we create our test set <em>before</em> re-sampling; in other words, we will only re-sample the <em>training</em> data, not the test data. That way, we will get a much better idea of how the model will perform in practice.</li><li>There is another reason to only make changes to the training set when using re-sampling techniques. We know from <a href="/python-for-fantasy-football-addressing-class-imbalance-in-machine-learning/">part 6</a> that SMOTE creates new data points by interpolating between existing ones. We likely had many examples in our training set that were nearly identical to synthetic examples in the test set. It’s not at all surprising that our previous model performed really well with synthetic data in the test set!  If we had used a naive approach of just duplicating existing data this would be even worse, as we could easily have identical observations in both the training and test sets.</li></ul>
+<p>To rectify this problem, we have two options:</p>
+<ul><li>Call train/test split before fitting SMOTE-NC on X_train and y_train only, using X_test and y_test to see how the model performs.</li><li>Define a custom cross-validation function that re-samples our training data inside each fold, leaving the test data untouched each time.</li></ul>
+<p>After reading this article, you will know how to do both. The first one is easy to implement in sklearn; all we need to do is set ‘stratify=labels’ inside train/test split. We know that our original dataset contains roughly a 9:1 ratio of ‘no goal’ to ‘goal’ examples. A stratified split will ensure that those class ratios are maintained when splitting into a training and test set. To save time I skipped the imports and data pre-processing steps here, but if you are following along in <a href="https://github.com/twhelan22/python-for-fantasy-football">notebook form</a> you will see those first.</p>
+<pre><pre class="brush: python; title: ; notranslate" title="">
+# Split off a test set that is representative of our overall dataset using 'stratify'
+X_train, X_test, y_train, y_test = train_test_split(features, labels, test_size=0.20, 
+                                                    shuffle=True, stratify=labels, random_state=42)
+
+# Show the class distribution in each label set
+def get_class_dist(data, name):
+    unique, counts = np.unique(data, return_counts=True)
+    pct = 100*(counts/len(data))
+    d = dict(zip(unique, zip(counts, pct)))
+    print(len(data), 'total examples in %s' % name)
+    for key, values in d.items():
+        print('class %d: %d examples,' % (key, values[0]), "{0:.2f}%".format(values[1]))
+    print('')
+    return
+
+get_class_dist(data=y_train, name='y_train')
+get_class_dist(data=y_test, name='y_test')
+</pre></pre>
+<figure class="wp-block-image"><img alt="" decoding="async" loading="lazy" src="/img/stratified_split.png"/></figure>
+<p>Looks like it worked! We can now re-sample just the training set, and leave the test set untouched. As you can see below, the training set now contains a 50/50 split between classes after re-sampling.</p>
+<pre><pre class="brush: python; title: ; notranslate" title="">
+# Create re-sampled data using SMOTE
+# Get column indices instead of names for categorical features (required input for SMOTE-NC)
+# Remember in Python the first column in a dataset is at index 0, 2nd column is index 1 etc
+cat_cols = ['play_pattern', 'under_pressure', 'body_part', 'technique', 'first_time',
+                'follows_dribble', 'redirect', 'one_on_one', 'open_goal', 'deflected']
+
+cat_cols_ind = []
+for key in cat_cols:
+    ind = X_train.columns.get_loc(key)
+    cat_cols_ind.append(ind)
+
+# Fit SMOTE-NC
+smote = SMOTENC(categorical_features=cat_cols_ind, random_state=42, n_jobs=-1)
+X_train_res, y_train_res = smote.fit_resample(X_train, y_train)
+
+get_class_dist(data=y_train_res, name='y_train_res')
+</pre></pre>
+<figure class="wp-block-image"><img alt="" decoding="async" loading="lazy" src="/img/smote_resampled.png"/></figure>
+<h2 class="wp-block-heading">Will re-sampling actually help us much here?</h2>
+<p>Contrary to popular opinion, this is quite an annoying example to pick for our first attempt at machine learning, and we might not get to the point were we have a really good classifier. To illustrate this, I’m going to use something called <a href="https://en.wikipedia.org/wiki/Principal_component_analysis">Principal Component Analysis</a> (PCA). I won’t go into too much detail on the theory here, but essentially what this does is takes our n-D dataset and squashes it down into a size that we can easily plot (e.g. 2-D). In other words, we can turn our original 14 features into just two, PCA1 and PCA2, and create a scatter plot to see if our features do a good job of differentiating between ‘goal’ and ‘no goal’ situations.</p>
+<pre><pre class="brush: python; title: ; notranslate" title="">
+def pca_plot(X, y, title):
+    """via https://github.com/wangz10/class_imbalance/blob/master/Main.ipynb"""
+    X = StandardScaler().fit_transform(X)
+    pca = PCA(n_components = 2)
+    X_pc = pca.fit_transform(X)
+    
+    plt.style.use('seaborn-notebook')
+    fig, ax = plt.subplots(figsize=(8.5, 8.5))
+    mask = y==0
+    ax.scatter(X_pc[mask, 0], X_pc[mask, 1], color='#1f77b4', marker='o', label='Class 0', alpha=0.5, s=20)
+    ax.scatter(X_pc[~mask, 0], X_pc[~mask, 1], color='#ff7f0e', marker='x', label='Class 1', alpha=0.65, s=20)
+    ax.set_xlabel('PC1')
+    ax.set_ylabel('PC2')
+    ax.legend(loc='best')
+    plt.title(title);
+    return
+
+pca_plot(X_train, y_train, title='PCA plot for original dataset')
+pca_plot(X_train_res, y_train_res, title='PCA plot using SMOTE resampling')
+</pre></pre>
+<figure class="wp-block-image"><img alt="" decoding="async" loading="lazy" src="/img/pca_orig.png"/></figure>
+
+<p>Um, that would be a no! A lot of goals look the same as misses, and we can see that here – there is a lot of overlap between the two classes. It’s not surprising our model is struggling to achieve good results, then. We’ll explore feature engineering in a future article to see if we can improve this a bit, but we probably won’t get to the point where we have a clear boundary between classes.</p>
+<p>To further illustrate why this is a particularly tricky problem, let’s take a look at a different dataset where the features do a good job of differentiating between classes.</p>
+<pre><pre class="brush: python; title: ; notranslate" title="">
+# Compare with a different unbalanced dataset - breast_cancer:
+# https://scikit-learn.org/stable/modules/generated/sklearn.datasets.load_breast_cancer.html
+# In this case, as with many common classification problems, a clear boundary can be observed between the classes
+bc_data = load_breast_cancer()
+
+# This dataset isn't imbalanced by default
+# Define function to allow resampling of the data based on a multiplier for minority class
+# See https://imbalanced-learn.org/en/stable/datasets/index.html#make-imbalanced
+def ratio_multiplier(y, minority_class_weight):
+    multiplier = {0: minority_class_weight, 1: (1-minority_class_weight)}
+    target_stats = Counter(y)
+    for key, value in target_stats.items():
+        target_stats[key] = int(value * multiplier[key])
+    return target_stats
+
+# Resample using a 9:1 ratio between class 0 and class 1
+X_bc, y_bc = make_imbalance(bc_data.data, bc_data.target,
+                            sampling_strategy=ratio_multiplier(y=bc_data.target, minority_class_weight=0.9))
+
+# Resample again with SMOTE to compare
+smote_bc = SMOTE(random_state=42, n_jobs=-1)
+X_bc_res, y_bc_res = smote_bc.fit_resample(X_bc, y_bc)
+
+# Plot results
+pca_plot(X_bc, y_bc, title='PCA plot for an imbalanced dataset with limited class overlap')
+pca_plot(X_bc_res, y_bc_res, title='PCA plot for an imbalanced dataset with limited class overlap using SMOTE resampling')
+</pre></pre>
+<figure class="wp-block-image"><img alt="" decoding="async" loading="lazy" src="/img/pca_bc.png"/></figure>
+<p>The dataset we are using here is <a href="https://scikit-learn.org/stable/modules/generated/sklearn.datasets.load_breast_cancer.html">sklearn’s ‘breast cancer’ data</a>,  which is a much more typical example of the sorts of classification problems that machine learning is really well suited to. It would be pretty easy to draw a single line through these plots to separate orange and blue points, but that would be very difficult with our football data. Something like SMOTE will be really helpful here, because all of the new orange data points are still separate from the blue ones. If you have extra time, it’s a great idea to play around with the breast cancer example so you can see how easy it can be to achieve really good results with machine learning.</p>
+<h2 class="wp-block-heading">Exploring different re-sampling techniques</h2>
+<p>Our natural instinct is that more data is better, but when dealing with a lot of overlap between classes undersampling might actually be a better strategy than oversampling. The basic idea is that if we have two data points from different classes that are really close together, getting rid of one will help to define a more clear boundary between classes. Unfortunately we can already guess that this might not help us since our data is so noisy, but it’s worth a try anyway! It’s also possible to combine undersampling and oversampling techniques, which is often going to be a great strategy when you have a class imbalance. Let’s try the following methods and see how they compare (see the links for more info):</p>
+<ul><li><a class="broken_link" href="http://imbalanced-learn.org/en/stable/under_sampling.html#tomek-links">Tomek’s links undersampling</a>.<strong> </strong>If the nearest neighbour of a ‘no goal’ observation is a ‘goal’, it will be removed.</li><li><a class="broken_link" href="http://imbalanced-learn.org/en/stable/under_sampling.html#edited-nearest-neighbors">Edited nearest neighbours undersampling</a>. Similar to Tomek’s links, but it removes <em>all</em> ‘no goal’ neighbours that don’t agree enough with a ‘goal’ observation, not just the nearest neighbour.</li><li><a class="broken_link" href="http://imbalanced-learn.org/en/stable/combine.html#combine">SMOTETomek</a>. Carries out SMOTE re-sampling and then cleans the observations using the Tomek’s links method.</li><li><a class="broken_link" href="http://imbalanced-learn.org/en/stable/combine.html#combine">SMOTEENN</a>.  Carries out SMOTE re-sampling and then cleans the observations using the edited nearest neighbours method.</li></ul>
+<p>To run the tests we’ll be using a random forest classifier instead of a decision tree classifier. I’ll go into more detail on how random forests work in future articles. For now all you need to know is that instead of using just one decision tree, we can use an entire ‘forest’ that all vote on the model prediction. In practice you’re always going to want to use a random forest instead of a single decision tree, as they give better results whilst also mitigating the risk of overfitting.</p>
+<p>The following code defines functions to check a model with re-sampling using cross-validation and plot the results. Have a read through to make sure you understand how it works – if you get stuck, leave a comment. There is almost certainly a more efficient way to write this, so feel free to improve it on your own if you like.</p>
+<pre><pre class="brush: python; title: ; notranslate" title="">
+# Define a function to plot barplot comparisons of models
+def barplot_comparison(df, x='name', y1='mcc', y2='brier_loss', figsize=(18, 8)):
+    sns.set(style='white')
+
+    f, axs = plt.subplots(ncols=2, figsize=figsize, sharey=False)
+    
+    # Plot bars
+    sns.barplot(x=x, y=y1, data=df, palette='muted', ax=axs[0])
+    sns.barplot(x=x, y=y2, data=df, palette='muted', ax=axs[1])
+
+    # Tweak the visual presentation
+    axs[0].yaxis.grid(True)
+    axs[0].set(xlabel="", ylim=(min(df[y1]-0.02),max(df[y1]+0.02)))
+    axs[1].yaxis.grid(True)
+    axs[1].set(xlabel="", ylim=(min(df[y2]-0.02),max(df[y2]+0.02)))
+    sns.despine(trim=True, left=True);
+    
+    return
+
+# Define a function to plot boxplot comparisons of models
+def boxplot_comparison(df, x='name', y1='mcc', y2='brier_loss', figsize=(18, 8)):
+    sns.set(style='white')
+
+    f, axs = plt.subplots(ncols=2, figsize=figsize, sharey=False)
+
+    # Plot boxes
+    sns.boxplot(x=x, y=y1, data=df,
+                whis='range', palette='muted', ax=axs[0])
+    sns.boxplot(x=x, y=y2, data=df,
+                whis='range', palette='muted', ax=axs[1])
+
+    # Add in points to show each observation
+    sns.swarmplot(x=x, y=y1, data=df,
+                  size=4, color='.3', linewidth=0, ax=axs[0])
+    sns.swarmplot(x=x, y=y2, data=df,
+                  size=4, color='.3', linewidth=0, ax=axs[1])
+
+    # Tweak the visual presentation
+    axs[0].yaxis.grid(True)
+    axs[0].set(xlabel="", ylim=(min(df[y1]-0.02),max(df[y1]+0.02)))
+    axs[1].yaxis.grid(True)
+    axs[1].set(xlabel="", ylim=(min(df[y2]-0.02),max(df[y2]+0.02)))
+    #axs[1].set_ylim(axs[1].get_ylim()[::-1])
+    sns.despine(trim=True, left=True);
+    
+    return
+
+# Define a function to run stratified k-fold cross-validation and return scores for different models
+# If resampling is set, the model will resample within each fold of the cross-validation
+def check_model(model, resampling, calibrate, X=features, y=labels, cat_features=cat_cols_ind,
+                k=5, print_res=True, plot_pca=False, random_state=42):
+    
+    # Convert inputs to numpy arrays
+    X = np.array(X)
+    y = np.array(y)
+    
+    # Define the cross-validation parameters
+    # Common values of k are 5 and 10, as these have been shown experimentally to produce the best results
+    cv = StratifiedKFold(n_splits=k, shuffle=True, random_state=random_state)
+    
+    # Create lists to save results to
+    mcc = []
+    brier = []
+    actual_goals = []
+    pred_goals = []
+    model_name = model.__class__.__name__
+
+    # Create training and test data using cross validation and fit model for each fold
+    for ii, (train_index, valid_index) in enumerate(cv.split(X, y)):
+        X_train, X_valid = X[train_index], X[valid_index]
+        y_train, y_valid = y[train_index], y[valid_index]
+        
+        if resampling == None:
+            res = 'no'
+        else:
+            X_train, y_train = resampling.fit_resample(X_train, y_train)
+            res = resampling.__class__.__name__
+
+        # Calibrate model if necessary
+        if calibrate == None:
+            calibrated_probs = 'uncalibrated probabilities'
+            model.fit(X_train, y_train)
+        else:
+            model = CalibratedClassifierCV(model, cv=2, method=calibrate)
+            model.fit(X_train, y_train)
+            calibrated_probs = '%s calibration' % calibrate    
+            
+        y_pred = model.predict(X_valid)
+        y_pred_proba = model.predict_proba(X_valid)[:,1]
+        
+        # Calculate mcc score, brier_loss and sum of predicted goal probabilities
+        actual_goals.append(sum(y_valid))
+        pred_goals.append(sum(y_pred_proba))
+        mcc.append(matthews_corrcoef(y_valid, y_pred))
+        brier.append(brier_score_loss(y_valid, y_pred_proba))
+        
+        if plot_pca == True and ii == 0:
+            pca_plot(X_train, y_train, title='%s with %s resampling (1st fold)'
+              % (model_name, res))
+        else: pass
+    
+    # Save the results to a dataframe
+    df = pd.DataFrame()
+    df['model'] = model_name
+    df['resampling'] = res
+    df['mcc'] = mcc
+    df['brier_loss'] = brier
+    df['actual_goals'] = actual_goals
+    df['predicted_goals'] = pred_goals
+    df['goals_diff'] = abs(df['actual_goals'] - df['predicted_goals'])
+    df['calibrated'] = calibrated_probs
+    
+    # Print a summary of the results if required
+    if print_res == True:
+        print('Method: %s with %s resampling and %s'
+              % (model_name, res, calibrated_probs))
+        print('Goals:', '{0:.2f}'.format(df['actual_goals'].mean()))
+        print('Predicted Goals:', '{0:.2f}'.format(df['predicted_goals'].mean()))
+        print('MCC:', '{0:.3f}'.format(df['mcc'].mean()))
+        print('Brier Loss:', '{0:.3f}'.format(df['brier_loss'].mean()))
+        print('')
+    else: pass
+
+    return df
+</pre></pre>
+<p>Now that’s done, we can add models to a list and loop through it, calling check_model to test each model in turn. If you’re working through the notebook you will see a printout of the results and PCA plots for each model, but to keep things simple here I’ll just show the barplot of the results.</p>
+<pre><pre class="brush: python; title: ; notranslate" title="">
+# Try different re-sampling methods with a RandomForestClassifier
+# For some reason sklearn and imblearn's default is to use only one processor core
+# Most people have multiple cores these days!
+# n_jobs=-1 will run the model on all cores in parallel, which can speed things up quite a bit
+
+tomek = TomekLinks(n_jobs=-1, random_state=42)
+enn = EditedNearestNeighbours(n_jobs=-1, random_state=42)
+smote_tomek = SMOTETomek(smote=smote_nc, tomek=tomek, random_state=42)
+smote_enn = SMOTEENN(smote=smote_nc, enn=enn, random_state=42)
+rf = RandomForestClassifier(n_estimators=100, n_jobs=-1, random_state=42)
+
+models = []
+# Format is name, model, resampling method, probability calibration
+models.append(('None', rf, None, None))
+models.append(('SMOTE', rf, smote, None))
+models.append(('Tomek', rf, tomek, None))
+models.append(('ENN', rf, enn, None))
+models.append(('SMOTETomek', rf, smote_tomek, None))
+models.append(('SMOTEENN', rf, smote_enn, None))
+
+results_df = pd.DataFrame()
+for name, model, resampling, calibrate in models:
+    result = check_model(model, resampling, calibrate, plot_pca=True)
+    result['name'] = name
+    results_df = results_df.append(result)
+
+# Call boxplot_comparison here instead if you like
+barplot_comparison(results_df)
+</pre></pre>
+<figure class="wp-block-image"><img alt="" decoding="async" loading="lazy" src="/img/resampling_results.png"/></figure>
+<p>The first thing you will notice is that we are evaluating the models based on two metrics we haven’t come across yet – ‘mcc’ and ‘brier_loss’.</p>
+<ul><li><a href="https://en.wikipedia.org/wiki/Matthews_correlation_coefficient">Matthews correlation coefficient (MCC)</a>. One of the better ways to represent an entire confusion matrix in a single number (see link for details). Values range from -1 (horrible) to +1 (perfect), with zero being no better than random.</li><li><a href="https://en.wikipedia.org/wiki/Brier_score">Brier loss score</a>. This gives us a single number to help determine how accurate the model is at predicting the <em>probability</em> of an observation belonging to each class. This metric measures the mean squared difference between the predicted probabilities and the actual outcome, so a lower value is better.</li></ul>
+<p>Given our domain expertise, and what we have just observed about the distribution of our data, we know already that trying to accurately classify ‘goal’ and ‘no goal’ in a pure sense is probably a lost cause. Instead, it makes sense to focus on the ability of our model to predict the probability of ‘goal’ or ‘no goal’, since this is what we actually care about with an xG model anyway. Random forests typically average out the predictions from each tree to produce probability estimates, so <a class="broken_link" href="https://stats.stackexchange.com/questions/337250/random-forest-probability-vs-logistic-regression-probability">they often outperform logistic regression models</a>. In fact, random forests (or some variation of them) are so good that they are pretty much the only thing you need to use in practice unless you’re doing deep learning!</p>
+<p>We can see here that unfortunately there seems to be a trade-off between the Matthews correlation coefficient and Brier score, with the exception of Tomek’s links re-sampling. If you’re following along in notebook form you will notice that the re-sampling methods tend to produce probability estimates that are far too high, e.g. 92.8 predicted goals with SMOTE vs 49 actual goals! This is because the balanced training data now looks very different to the imbalanced test data. If our goal is to optimise for Brier score loss instead of MCC, maybe we don’t want to use re-sampling after all.</p>
+<h2 class="wp-block-heading">Calibrating probabilities</h2>
+<p>In sklearn, it’s possible to ‘calibrate’ the probability estimates of a classifier, which can sometimes result in a lower Brier loss (see <a href="https://machinelearningmastery.com/calibrated-classification-model-in-scikit-learn/">here</a> and <a class="broken_link" href="http://jmetzen.github.io/2015-04-14/calibration.html">here</a> for more detailed explanations). The following code can be used to plot reliability curves using no calibration, <a href="https://en.wikipedia.org/wiki/Platt_scaling">Platt scaling</a> (sigmoid) and <a href="https://en.wikipedia.org/wiki/Isotonic_regression">isotonic regression</a>. In my opinion this is one of those situations where you don’t need to worry too much about learning exactly how something works, just try it out and see if it helps!</p>
+<pre><pre class="brush: python; title: ; notranslate" title="">
+def plot_calibration_curve(name, model, cv, resampling=None,
+                           X_train=X_train, y_train=y_train,
+                           X_test=X_test, y_test=y_test):
+    """Plot calibration curve for est w/o and with calibration
+    see http://jmetzen.github.io/2015-04-14/calibration.html
+    """   
+    # Resampling
+    if resampling == None:
+        pass
+    else:
+        X_train, y_train = resampling.fit_resample(X_train, y_train) 
+       
+    # Calibrated with sigmoid calibration
+    sigmoid = CalibratedClassifierCV(model, cv=cv, method='sigmoid')
+    
+    # Calibrated with isotonic calibration
+    isotonic = CalibratedClassifierCV(model, cv=cv, method='isotonic')
+
+    # Fit and plot each model
+    fig = plt.figure(figsize=(9, 9))
+    ax1 = plt.subplot2grid((3, 1), (0, 0), rowspan=2)
+    ax2 = plt.subplot2grid((3, 1), (2, 0))
+
+    ax1.plot([0, 1], [0, 1], "k:", label="Perfectly calibrated")
+    for clf, name in [(model, name),
+                      (isotonic, name + ' + Isotonic'),
+                      (sigmoid, name + ' + Sigmoid')]:
+        clf.fit(X_train, y_train)
+        y_pred = clf.predict(X_test)
+        y_pred_proba = clf.predict_proba(X_test)[:, 1]
+        clf_score = brier_score_loss(y_test, y_pred_proba, pos_label=labels.max())
+        
+        print("%s:" % name)
+        print('Goals:', (sum(y_test)))
+        print('Predicted Goals:', '{0:.2f}'.format((sum(y_pred_proba))))
+        print('MCC:', '{0:.3f}'.format(matthews_corrcoef(y_test, y_pred)))
+        print('Brier Loss:', '{0:.3f}'.format(clf_score))
+        print('')
+
+        fraction_of_positives, mean_predicted_value = \
+            calibration_curve(y_test, y_pred_proba, n_bins=10)
+
+        ax1.plot(mean_predicted_value, fraction_of_positives, "s-",
+                 label="%s (%1.3f)" % (name, clf_score))
+
+        ax2.hist(y_pred_proba, range=(0, 1), bins=10, label=name,
+                 histtype="step", lw=2)
+
+    ax1.set_ylabel("Fraction of positives")
+    ax1.set_ylim([-0.05, 1.05])
+    ax1.legend(loc="lower right")
+    ax1.set_title('Calibration plots  (reliability curve)')
+
+    ax2.set_xlabel("Mean predicted value")
+    ax2.set_ylabel("Count")
+    ax2.legend(loc="upper center", ncol=2)
+
+    plt.tight_layout()
+    
+plot_calibration_curve("RF", model=rf, cv = 5, resampling=None)
+</pre></pre>
+<figure class="wp-block-image"><img alt="" decoding="async" loading="lazy" src="/img/calibration.png"/></figure>
+<p>Values underneath the diagonal mean that the probability estimates tend to be too high, which is the case with our default random forest (blue). Calibration does appear to improve things a bit, with the orange and green lines following the diagonal more closely, so it might be worth using in our model. <a href="https://machinelearningmastery.com/calibrated-classification-model-in-scikit-learn/">Isotonic regression has been shown to overfit on small datasets</a>, so to be safe Platt scaling is a better choice in our case. Let’s see if it helps our random forest when using re-sampling.</p>
+<pre><pre class="brush: python; title: ; notranslate" title="">
+models = []
+models.append(('None', rf, None, 'sigmoid'))
+models.append(('SMOTE', rf, smote, 'sigmoid'))
+models.append(('Tomek', rf, tomek, 'sigmoid'))
+models.append(('ENN', rf, enn, 'sigmoid'))
+models.append(('SMOTETomek', rf, smote_tomek, 'sigmoid'))
+models.append(('SMOTEENN', rf, smote_enn, 'sigmoid'))
+
+results_df = pd.DataFrame()
+for name, model, resampling, calibrate in models:
+    result = check_model(model, resampling, calibrate)
+    result['name'] = name
+    results_df = results_df.append(result)
+    
+barplot_comparison(results_df)
+</pre></pre>
+<figure class="wp-block-image"><img alt="" decoding="async" loading="lazy" src="/img/sigmoid.png"/></figure>
+<p>We know from the reliability curves that calibration does help a little, but the Brier loss is still far too high with most re-sampling techniques aside from Tomek’s links. If we use any of these methods in our final model it should be Tomek’s links with sigmoid calibration, otherwise it’s probably best to just ignore re-sampling altogether.</p>
+<h2 class="wp-block-heading">Testing different algorithms</h2>
+<p>In <a href="/python-for-fantasy-football-addressing-class-imbalance-in-machine-learning/">the previous article </a>I mentioned that specialised machine learning algorithms exist that help deal with class imbalance. These algorithms typically include class weighting and/or some form of re-sampling by default. Unsurprisingly, there are a couple of algorithms built into imblearn that we can try. We will test the performance of the following:</p>
+<ul><li>Sklearn’s <a href="https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestClassifier.html#sklearn.ensemble.RandomForestClassifier">RandomForestClassifier</a></li><li>Imblearn’s <a class="broken_link" href="http://imbalanced-learn.org/en/stable/generated/imblearn.ensemble.BalancedRandomForestClassifier.html#imblearn.ensemble.BalancedRandomForestClassifier">BalancedRandomForestClassifier</a></li><li>Sklearn’s <a href="https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.AdaBoostClassifier.html">AdaBoostClassifier</a></li><li>Imblearn’s <a class="broken_link" href="http://imbalanced-learn.org/en/stable/generated/imblearn.ensemble.EasyEnsembleClassifier.html#imblearn.ensemble.EasyEnsembleClassifier">EasyEnsembleClassifier</a>, which also uses AdaBoost (Adaptive Boosting) learners<br/></li><li><a href="https://xgboost.readthedocs.io/en/latest/">XGBoost</a>, an ‘eXtreme Gradient Boosting’ algorithm that often achieves superior performance to other techniques </li></ul>
+<p>I’ll look at a couple of these algorithms more in the next article, but if you want to skip ahead a bit click the links above to read through the documentation for each.</p>
+<pre><pre class="brush: python; title: ; notranslate" title="">
+brf = BalancedRandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1)
+ab = AdaBoostClassifier(n_estimators=100, random_state=42)
+ee = EasyEnsembleClassifier(n_estimators=100, random_state=42, n_jobs=-1)
+xgb = XGBClassifier(random_state=42)
+
+models = []
+models.append(('RF', rf, None, None))
+models.append(('BRF', brf, None, None))
+models.append(('AB', ab, None, None))
+models.append(('EE', ee, None, None)) # takes forever to run with calibration, be careful!
+models.append(('XGB', xgb, None, None))
+
+results_df = pd.DataFrame()
+for name, model, resampling, calibrate in models:
+    result = check_model(model, resampling, calibrate)
+    result['name'] = name
+    results_df = results_df.append(result)
+    
+barplot_comparison(results_df)
+</pre></pre>
+<figure class="wp-block-image"><img alt="" decoding="async" loading="lazy" src="/img/algorithms.png"/></figure>
+<p>It’s not really fair to compare the imblearn algorithms (using re-sampling) to the default random forest or XGBoost classifier (try and use re-sampling in those as well if you like), but what this analysis does tell us is that their probability estimates will be nowhere near what we’d like to see. Calibration does improve the loss significantly for BRF and EE, although it takes a <em>really</em> long time to run and the results are no better than the other algorithms anyway. AdaBoost also looks pretty terrible all around in comparison to the rest, so we’ll definitely ignore that going forward. What we have basically seen here is what experienced practitioners would tell you from the start – random forests and XGBoost are all you should be using in pretty much every situation. For that reason, I’ll dive into these two in more depth in the next part of the series.</p>
+<h2 class="wp-block-heading">Conclusion</h2>
+<p>We’ve seen here that understanding how to attack a problem with machine learning isn’t always as simple as it first appears. After thinking we were onto a winner with SMOTE, it looks like we should instead use Tomek’s links undersampling, or just avoid re-sampling altogether. Hopefully you aren’t put off yet, as this is a particularly frustrating example to look at for an introductory series (sorry!). I strongly encourage trying out some other classification problems, e.g. the breast cancer one above, to get a better idea of how easy it can be to create good machine learning models. Sklearn has a lot of built-in datasets that you can use – just chuck the data into a random forest and see what happens!</p>
+<p>As always, thanks for reading! Please share the article on social media if you found it useful. The next part is already in the works, so it shouldn’t be long before it’s released! Thanks to <a href="https://statsbomb.com/">StatsBomb</a> for providing the data.</p>
+</main>
+<footer>FantasyFutopia, 2017–2019. Archived; no comments, forms or affiliate links.</footer></body></html>

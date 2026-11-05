@@ -1,0 +1,249 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Python for Fantasy Football – Getting and Cleaning Data – FantasyFutopia (archive)</title><link rel="canonical" href="https://www.fantasyfutopia.com/python-for-fantasy-football-getting-and-cleaning-data/"><link rel="stylesheet" href="/style.css"></head>
+<body><div class="banner">This site is archived (2017–2019). Something new is coming.</div><header class="s"><a href="/">FantasyFutopia</a></header><main><h1>Python for Fantasy Football – Getting and Cleaning Data</h1><p class="meta">2018-10-15</p><p>Welcome to part 3 of the Python for Fantasy Football series! If you missed <a href="/python-for-fantasy-football-introduction/">part 1</a> or <a href="/python-for-fantasy-football-matchup-adjustment/">2</a>, go back and check those out first before continuing. I’ve had a lot of positive comments on the series so far, and I really appreciate everyone taking the time to do so. Keep the feedback coming! The most common question I had was how I got the data in the first place, and since getting and cleaning data is a crucial skill for any coder it makes sense to focus on that next.</p>
+<h1>How to access a webpage in Python</h1>
+<p>There are several ways that you can access web data in Python. Here are four key methods, listed in order of preference:</p>
+<ol>
+<li>Check if the site has an API (Application Programming Interface). If it does, the site has already done the hard work of creating a nice interface for you to access their data, along with instructions on how to use it. It’s always worth checking this first before attempting to scrape the data.</li>
+<li>If the data you want is stored in a html table, you can read it into pandas directly using pd.read_html().</li>
+<li>If the first two options aren’t possible, make a request to the url to grab the webpage and then use a html parser like BeautifulSoup to extract the information you want afterwards.</li>
+<li>If the site is using JavaScript, you will probably need a web driver like Selenium to help pull the data.</li>
+</ol>
+<p>In this article, I will show you how to get data using methods 2-4, and introduce some more pandas tools to help you to clean the data. Before we start scraping, however, it’s essential that we know how to do it legally without causing any unintentional damage.</p>
+<h1>Responsible scraping</h1>
+<p>Whilst most sites don’t like being scraped, it’s very difficult for them to stop it. After all, it’s not that different from someone accessing the content through a browser. However, just because you can scrape doesn’t mean you should. There are a few key guidelines to follow to ensure that you are scraping responsibly.</p>
+<h2>1. Respect robots.txt</h2>
+<p>Most websites will have a robots.txt file, which is basically used to ask bots not to crawl certain parts of their site. For example, check out <a href="https://fantasy.premierleague.com/robots.txt">https://fantasy.premierleague.com/robots.txt</a>. This basically reads as:</p>
+<p>Dear all robots,<br/>
+It would be greatly appreciated if you respect the Robots Exclusion Standard and don’t crawl the links we have gone to the trouble of disallowing here please. We can’t stop you and if you aren’t doing anything nasty you might get away with it, but don’t be surprised if your IP address gets blocked, especially if you are making lots of requests to our server.<br/>
+Regards,<br/>
+Website Admin</p>
+<p>As long as you are scraping responsibly there are no legal repercussions from ignoring robots.txt, but you should keep in mind that a site doesn’t want you to scrape any pages they have chosen to disallow.</p>
+<h2>2. Read the TOS</h2>
+<p>It’s very important to check the terms and conditions of a site before scraping it. The TOS are a legal agreement, so ignoring them could get you in trouble. Fortunately, many sites will allow you to use their information for your own private and personal use as long as you aren’t reproducing any of the data for commercial purposes. For example, have a look at the TOS at <a href="https://www.premierleague.com/terms-and-conditions">https://www.premierleague.com/terms-and-conditions</a>.</p>
+<p>The TOS state that downloading material from the site is allowed for your own private and personal use, which is great news for FPL fans. However, it’s not 100% clear whether I would be in breach of the TOS by scraping the FPL site as an example for this article, so I’m not going to despite it being a popular request. I’ll go through the basics of how to scrape in general, you’ll have to decide for yourself whether you think it’s OK to scrape a particular website or not.</p>
+<h2>3. Don’t be a d*ck</h2>
+<p>Websites will slow down or even crash if the load on the server exceeds capacity, which results in a terrible experience for everyone else. It’s also likely to draw unwanted attention from the website admin and you might get IP blocked. As far as they are concerned, putting excess strain on their server is a malicious act, whether it’s intentional or not! Ideally you should be trying to make a single request to a server to grab an entire webpage and parsing it out later, rather than constantly making a new request every time you want a specific piece of information. If you do have to make multiple requests try to do it outside of peak hours and add a time delay in between each one (if your scraper isn’t running at a significantly faster speed than a human user could navigate the site, you should be fine).</p>
+<h1>Using pandas to get data</h1>
+<p>Sometimes, you will be lucky and find that the information you want is already stored in a nicely formatted html table. In this first example, we’re going to get injury data from the excellent FantasyFootballScout website using one of the built-in functions from pandas.</p>
+<pre class="brush: python; title: ; notranslate" title=""># Import the libraries we need
+import pandas as pd
+import re
+import random
+import requests
+from bs4 import BeautifulSoup
+from selenium import webdriver
+import datetime</pre>
+<p>As a general note for this series, I can’t remember which packages come pre-installed with Anaconda and which don’t, so if you get a ‘module not found’ error it’s likely because it’s not installed. To rectify that, open up an Anaconda prompt (like a command prompt) and type: ‘conda install’ followed by the module name, e.g. conda install beautifulsoup4, then press enter to run. This should download and install the package you want. Alternatively, you can use ‘pip install’ instead, which is the default method of installing Python packages (you will need this if not using Anaconca). If you get stuck, every module should have an installation guide in the documentation.</p>
+<pre class="brush: python; title: ; notranslate" title="">injuries_url = 'https://www.fantasyfootballscout.co.uk/fantasy-football-injuries/'
+
+# Uses pandas built-in read_html function to grab a list of all html tables from injuries_url
+# You can print injury_tables to check the output here if you like
+# In this case there is only one table on the page, but sometimes you will have a few
+injury_tables = pd.read_html(injuries_url, encoding='utf-8')
+
+# Select the first table from the injury_tables list
+# Note that in Python data structures the first item is always at index 0, not index 1 (which is the second item)
+injuries = injury_tables[0]
+injuries.head(10)</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/injuries_1.png"/></p>
+<p>This looks pretty good already! Ideally it would be nice to have the player names in a better format though, so let’s sort that now.</p>
+<h1>Cleaning strings</h1>
+<pre class="brush: python; title: ; notranslate" title=""># Split the string inside the 'Name' column on the open bracket character
+# Will return a list, e.g. [Cech, Petr)] (uncomment the next line to check if you like)
+# injuries['split_checker'] = injuries['Name'].str.split('(')
+# Then use str.get() to grab the first item in the list and save it to a new column, 'last_name'
+injuries['last_name'] = injuries['Name'].str.split('(').str.get(0)
+
+# Repeat to get the first names, and then use str.strip() to remove the unwanted close bracket character
+injuries['first_name'] = injuries['Name'].str.split('(').str.get(1).str.strip(')')
+
+# Add the 'first_name' and 'last_name' columns with a space in between to create our cleaned 'full_name'
+injuries['full_name'] = injuries['first_name'] + ' ' + injuries['last_name']
+injuries.head()</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/injuries_2.png"/></p>
+<h1>Regular expressions</h1>
+<p>In this case the names were in a clearly defined format, ‘last (first)’, so str.split() worked well. However, it won’t always be that easy unfortunately! For more complicated problems you will probably be better off using ‘regular expressions’ (regex for short), which are a common feature of all programming languages. Regular expressions are essentially custom search patterns that allow you to find any combination of characters in a string. Whilst regular expressions are extremely useful, the downside is that they can often be confusing to understand, particularly if you are relatively new to coding, and I’m far from an expert myself. Unless you’re a genius that uses regex every day, it’s always best to Google the problem and use helper resources to remind yourself of the syntax. There are plenty of full tutorials on regular expressions so I’m not going to go too in-depth here, but I thought it was worth showing a quick example of how to use them. If you want to learn more, https://www.tutorialspoint.com/python/python_reg_expressions.htm is a good place to start.</p>
+<pre class="brush: python; title: ; notranslate" title=""># Import the re library for regular expressions
+import re
+
+# See https://regex101.com/ for a detailed explanation of exactly what each part of a regular expression is doing
+# Use the regex101 resource to test out regular expressions to make sure you will get the result you want
+# It's likely that someone has already encountered a similar problem, so search on Google/StackOverflow first before trying to write the expression yourself
+
+# Matches any word characters using \w, or any - characters, contained within brackets and extracts the result
+# expand=True by default (means return a dataframe of the result), but you will get warnings unless you specify it explicitly
+injuries['first_name_regex'] = injuries['Name'].str.extract(r'\(([\w-]+)\)', expand=True)
+
+# Matches all characters up to the first occurrence of a space \s followed by an open bracket \(
+# Note that because brackets are special 'control' characters, you need to 'escape' them first with a backslash to get an exact match
+# If we wanted to match a different character instead, e.g a dash, we wouldn't need to escape it first and could simply use -
+injuries['last_name_regex'] = injuries['Name'].str.extract(r'^(.+?)\s\(', expand=True)
+
+# Add the 'first_name_regex' and 'last_name_regex' columns with a space in between to create our cleaned 'full_name_regex'
+injuries['full_name_regex'] = injuries['first_name_regex'] + ' ' + injuries['last_name_regex']
+
+injuries.head()</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/injuries_3.png"/></p>
+<h1>Error checking</h1>
+<p>Any time you write some code to clean your data it’s always a good idea to check that it worked as expected. If you do have any errors, you will either need to correct them after you have done most of the processing or change your cleaning method to stop them from happening in the first place (the latter is typically preferable).</p>
+<pre class="brush: python; title: ; notranslate" title=""># Check to see if we have any errors
+injuries[injuries['full_name'].isna()]</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/injuries_4.png"/></p>
+<pre class="brush: python; title: ; notranslate" title=""># Note that if we were making a custom function to clean the data we would need to account for potential errors and try to avoid them in the first place
+# NaN = not a number, which essentially just means there is a missing value
+
+# Remove accented characters (see https://stackoverflow.com/questions/37926248/how-to-remove-accents-from-values-in-columns)
+injuries['last_name'] = injuries['last_name'].str.normalize('NFKD').str.encode('ascii', errors='ignore').str.decode('utf-8')
+
+# Set full name to equal last name when there is an error
+# This will take care of players that only use one name (e.g. Kenedy)
+# However, if we were trying to match the names to another source players like Lowe (Chris Lowe) and Alli (Dele Alli) could cause problems
+injuries['full_name'] = injuries['full_name'].fillna(injuries['last_name'])
+
+# Check the results now by printing the full name column for players that don't have a first name
+print(injuries['full_name'][injuries['first_name'].isna()])
+print('')
+
+# We can then just filter to the columns we want
+injuries = injuries[['full_name', 'Club', 'Status', 'Return Date', 'Latest News', 'Last Updated']]
+
+# Convert column names to lower case and replace spaces with underscores
+# There's no need to do this (just showing you how)
+# However, it's often helpful to have variable names and column names all using the same standard convention
+injuries.columns = injuries.columns.str.lower().str.replace(' ', '_')
+injuries.head()</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/injuries_5.png"/></p>
+<h1>Using dates</h1>
+<p>You will often see dates and times listed as an ‘object’ or ‘string’ when you read it into pandas, which isn’t very useful in situations where we want to filter the data to a particular date range. Pandas has built-in time series/date functionality that allows you to properly manipulate dates and times by converting them to datetime objects instead of strings.</p>
+<pre class="brush: python; title: ; notranslate" title=""># Check the data types of each column in the injuries dataframe
+injuries.dtypes</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/injuries_6.png"/></p>
+<pre class="brush: python; title: ; notranslate" title=""># Convert 'last_updated' column to datetime
+# We can specify the format of the date if necessary, but often pandas will convert it automatically
+# In this case, we don't want it to get confused between US and UK formats
+# SettingWithCopyWarning isn't always a problem as long as you know why you are getting it
+injuries['last_updated'] = pd.to_datetime(injuries['last_updated'], format='%d/%m/%Y')
+injuries.head()</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/injuries_7.png"/></p>
+<p>Now that the dates are in datetime format, we can use them to filter our data however we want. Here are a few examples:</p>
+<pre class="brush: python; title: ; notranslate" title=""># Get current date from the datetime library
+today = datetime.date.today()
+
+# Get date from one week ago
+one_week_ago = today - datetime.timedelta(days=7)
+
+# Filter injuries to show recent news from the past week
+recent_injuries = injuries[injuries['last_updated'] &amp;amp;gt;= one_week_ago]
+recent_injuries.head()</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/injuries_8.png"/></p>
+<pre class="brush: python; title: ; notranslate" title=""># Check which players are confirmed out for the next set of fixtures
+# Specify a date just past the next round of fixtures
+next_fixtures = datetime.datetime(2018, 10, 23)
+
+# Separate out 'Unknown' return date from the rest
+unknown_return = injuries[injuries['return_date'] == 'Unknown']
+return_too_late = injuries[injuries['return_date'] != 'Unknown']
+
+# Convert the dates in return_too_late and filter to show dates that are greater or equal to next_fixtures
+return_too_late['return_date'] = pd.to_datetime(return_too_late['return_date'], format='%d/%m/%Y')
+return_too_late = return_too_late[return_too_late['return_date'] &amp;amp;gt;= next_fixtures]
+
+# Combine return_too_late and unknown_return and sort by last_updated
+misses_next_match = unknown_return.append(return_too_late).sort_values(by=['last_updated'], ascending=False)
+misses_next_match.head()</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/injuries_9.png"/></p>
+<pre class="brush: python; title: ; notranslate" title=""># Check which players are doubtful for the next match
+doubtful = injuries[injuries['status'].str.contains('Doubt')]
+doubtful.head()</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/injuries_10.png"/></p>
+<h1>Scraping with Beautiful Soup</h1>
+<p>If the data you want isn’t in a html table, your best bet is to use a scraping library like BeautifulSoup4. If you have time, I highly recommend reading through the Beautiful Soup documentation <a href="https://www.crummy.com/software/BeautifulSoup/bs4/doc/">here</a> to get a good idea of how it works. A few people asked me how I got the xG data from www.understat.com for parts <a href="/python-for-fantasy-football-introduction/">1</a> and <a href="/python-for-fantasy-football-matchup-adjustment/">2</a>. The truth is that I actually just copied and pasted it, but we can do better than that! Let’s see if we can scrape the table by using the requests library in conjunction with bs4.</p>
+<pre class="brush: python; title: ; notranslate" title=""># Set the url we want
+xg_url = 'https://understat.com/league/EPL'
+
+# Use requests to download the webpage
+xg_data = requests.get(xg_url)
+
+# Get the html code for the webpage
+xg_html = xg_data.content
+
+# Parse the html using bs4
+soup = BeautifulSoup(xg_html, 'lxml')
+
+# It's good practice to try and put any extra code inside a new cell, so you don't have to make a request to the page more than once
+# If you keep running this cell it will make a new request to the site every time</pre>
+<pre class="brush: python; title: ; notranslate" title=""># Feel free to uncomment the line below and print out the soup if you want to see what it looks like
+# print(soup.prettify())
+# I'm not going to do that here because it will basically just print the html code for the entire webpage!
+# Instead, let's just print the page title
+print(soup.title)</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/bs4_1.png"/></p>
+<h1>Using the Selenium WebDriver</h1>
+<p>It looks like the scraper worked! However, if you check the full output you will notice that unfortunately the xG table we are after is inside a JavaScript element, which makes it difficult to access using this method. Recalling our options from earlier, we might need to use Selenium, which essentially just automates your browser to carry out tasks. Read through the unofficial documentation <a href="https://selenium-python.readthedocs.io/installation.html#introduction">here</a> to see how to install and use the Selenium WebDriver in Python. Selenium might seem complicated at first, but fortunately for the purposes of web scraping it’s fairly straightforward to use.</p>
+<pre class="brush: python; title: ; notranslate" title=""># Set up the Selenium driver (in this case I am using the Chrome browser)
+options = webdriver.ChromeOptions()
+
+# 'headless' means that it will run without opening a browser
+# If you don't set this option, Selenium will open up a new browser window (try it out if you like)
+options.add_argument('headless')
+
+# Tell the Selenium driver to use the options we just specified
+driver = webdriver.Chrome(chrome_options=options)
+
+# Tell the driver to navigate to the page url
+driver.get(xg_url)
+
+# Grab the html code from the webpage
+soup = BeautifulSoup(driver.page_source, 'lxml')</pre>
+<p>Now that we have the html code, we can navigate through it to get the information we want. A nice tip is to use the ‘inspect element’ feature in Chrome, or ‘Firebug’ if you prefer FireFox, to help identify the part of the code you are after. For example, in Chrome, right-click on the ‘Team’ column in your browser and press ‘Inspect’ to pull up the html code for that specific part of the webpage:</p>
+
+<p>You will see that the ‘Team’ text is within a ‘span’ element, which in turn is inside a ‘th’ (table header) element with the class ‘sort’. To access all elements with those attributes, we can use the following code:</p>
+<pre class="brush: python; title: ; notranslate" title=""># Get the table headers using 3 chained find operations
+# 1. Find the div containing the table (div class = chemp jTable)
+# 2. Find the table within that div
+# 3. Find all 'th' elements where class = sort
+headers = soup.find('div', attrs={'class':'chemp jTable'}).find('table').find_all('th',attrs={'class':'sort'})
+
+headers</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/bs4_2.png"/></p>
+<p>This returned a list of the html code for each ‘th’ element inside the ‘chemp jTable’ div. We can now iterate over the list and create a new list that just contains the text for the headers, without any extra unwanted html code:</p>
+<pre class="brush: python; title: ; notranslate" title=""># Iterate over headers, get the text from each item, and add the results to headers_list
+headers_list = []
+for header in headers:
+headers_list.append(header.get_text(strip=True))
+print(headers_list)</pre>
+<p>[‘№’,  ‘Team’,  ‘M’,  ‘W’,  ‘D’,  ‘L’,  ‘G’,  ‘GA’,  ‘PTS’,  ‘xG’,  ‘xGA’,  ‘xPTS’]</p>
+<p>Getting the data from the main body of the table requires a bit more thought, but you still don’t need that much code to do it. Try and read through the code to understand what it’s doing, and run each line separately if you get stuck.</p>
+<pre class="brush: python; title: ; notranslate" title=""># You can also simply call elements like tables directly instead of using find('table') if you are only looking for the first instance of that element
+body = soup.find('div', attrs={'class':'chemp jTable'}).table.tbody
+
+# Create a master list for row data
+all_rows_list = []
+# For each row in the table body
+for tr in body.find_all('tr'):
+# Get data from each cell in the row
+row = tr.find_all('td')
+# Create list to save current row data to
+current_row = []
+# For each item in the row variable
+for item in row:
+# Add the text data to the current_row list
+current_row.append(item.get_text(strip=True))
+# Add the current row data to the master list
+all_rows_list.append(current_row)
+
+# Create a dataframe where the rows = all_rows_list and columns = headers_list
+xg_df = pd.DataFrame(all_rows_list, columns=headers_list)
+xg_df</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/bs4_3.png"/></p>
+<h1>Conclusion</h1>
+<p>That’s it for now! Every web page will have a slightly different structure, and it can take a bit of time to figure out exactly how to access the specific part of the html code you are interested in. That said, by using the techniques above you should be able to get any information you want, providing you aren’t breaking any rules of course. If you have extra time, try out the exercises below to help reinforce the concepts from this part of the series. As always, please don’t forget to share the article if you enjoyed it!</p>
+<ol>
+<li>Automate the injury checker. Hint: you will need to scrape some fixture dates instead of specifying next_fixtures explicitly. It would be a good idea to create a single dataframe that includes both players that are confirmed to be out and players that are less than 75% fit.</li>
+<li>Check if any players from your FPL team are questionable or out. One way to do this would be to create a list of the players in your team and see if there are any positive matches in the injury report dataframe. Even better if you can think of a way to suggest suitable replacements automatically!</li>
+<li>Get rid of the unwanted text after the ‘+’ or ‘-‘ symbol in the xG, xGA and xPTS columns (this just shows the difference between actual and expected goals/points). Hint: use either str.strip() or regular expressions (or both!), as we did before with the injury table. It’s probably a good idea to change the column names as well, particularly the ‘no.’ column (or maybe you don’t even need that column).</li>
+<li>Create a function to get a clean xG table for a different league of your choosing on Understat. Note that good functions are as general as possible, meaning that you should be able to reuse it for any league or season just by changing the input parameters. If you have got this far, it should be pretty straightforward to just wrap your existing code inside a function.</li>
+</ol>
+</main>
+<footer>FantasyFutopia, 2017–2019. Archived; no comments, forms or affiliate links.</footer></body></html>

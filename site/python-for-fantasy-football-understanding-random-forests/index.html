@@ -1,0 +1,172 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Python for Fantasy Football – Understanding Random Forests – FantasyFutopia (archive)</title><link rel="canonical" href="https://www.fantasyfutopia.com/python-for-fantasy-football-understanding-random-forests/"><link rel="stylesheet" href="/style.css"></head>
+<body><div class="banner">This site is archived (2017–2019). Something new is coming.</div><header class="s"><a href="/">FantasyFutopia</a></header><main><h1>Python for Fantasy Football – Understanding Random Forests</h1><p class="meta">2019-02-05</p><p>Welcome to part 8 of my Python for Fantasy Football series! Since <a href="/python-for-fantasy-football-introduction-to-machine-learning/">part 5</a> we have been attempting to create our own expected goals model from the <a href="https://github.com/statsbomb/open-data">StatsBomb NWSL and FA WSL data</a> using machine learning. I wanted to move away from talking about class imbalance (finally!) to get onto something a bit easier – model interpretation. If you missed any of the previous articles or need a refresher, links are below:</p>
+<p><a href="/python-for-fantasy-football-introduction/">Part 1</a>, <a href="/python-for-fantasy-football-matchup-adjustment/">Part 2</a>, <a href="/python-for-fantasy-football-getting-and-cleaning-data/">Part 3</a>, <a href="/python-for-fantasy-football-apis-and-json-data/">Part 4</a>, <a href="/python-for-fantasy-football-introduction-to-machine-learning/">Part 5</a>, <a href="/python-for-fantasy-football-addressing-class-imbalance-in-machine-learning/">Part 6</a>, <a href="/python-for-fantasy-football-addressing-class-imbalance-part-2/">Part 7</a>, <a class="broken_link" href="https://github.com/twhelan22">GitHub (for notebooks)</a></p>
+<p><em>Note: when this article was first published there was an error with the input data which has since been fixed. Things changed quite a bit as a result, so if you want to see the original version, it’s still available in notebook form on </em><a class="broken_link" href="https://github.com/twhelan22"><em>GitHub.</em></a></p>
+<p>When we first looked at machine learning in <a href="/python-for-fantasy-football-introduction-to-machine-learning/">part 5</a> we were using sklearn’s ‘decision tree classifier’ to create our models. A single decision tree is easy to understand and implement, making it a good starting point.  However, the main disadvantage of a decision tree classifier is that has a tendency to overfit when you don’t set any input parameters. What essentially happens is that the algorithm creates an overly complex tree that fits the training set really well, but doesn’t generalise to unseen data.</p>
+<p>As we saw in <a href="/python-for-fantasy-football-addressing-class-imbalance-part-2/">part 7</a>, in practice we never really want to use a single decision tree to create models. Why use just one tree when we can use an entire forest?</p>
+<h2 class="wp-block-heading">Ensemble learners</h2>
+<p>Ensemble learners work by running multiple models and combining the predictions to obtain better overall results than any individual model could achieve on its own. An example is the ‘random forest’ algorithm, which trains a ‘forest’ of weak decision trees and combines the results to create a stronger, more robust model. When you think about it this seems pretty obvious – if you wanted to choose what restaurant to eat at, you would learn more about the quality of the food from the average review score than you would from any individual review. Two common techniques for creating ensemble learners are ‘bagging’ and ‘boosting, which I will run through quickly now.</p>
+<h3 class="wp-block-heading">Bagging</h3>
+<p>‘Bagging’ (short for ‘bootstrap aggregating’) is a technique where each model in the ensemble votes with equal weight on what the final aggregated model should look like. Random forests are an example of an algorithm that uses bagging techniques. ‘Bootstrapping’ refers to the process of sampling the data randomly with replacement each time a tree is trained, which means slightly different data-points are used to build each tree. The following video does a great job of explaining this concept further:</p>
+
+<h3 class="wp-block-heading">Boosting</h3>
+<p>When using ‘bagging’, multiple models are run at the same time, the results are averaged, and then the model is tested. ‘Boosting’ techniques extend this by training each individual model and using the results to inform the next model in the sequence. The process starts with a weak learner, with the results used to inform the next model in the chain (giving it a boost). In one example, samples that are harder to classify are weighted more heavily, so the next model knows to pay more attention to them. After enough iterations you will hopefully arrive at a strong learner that can often perform better than models that just use bagging. <a href="https://xgboost.readthedocs.io/">XGBoost</a> (eXtreme gradient boosting) is a popular boosting algorithm that often achieves superior results to other methods. Here is another short video to explain the concept:</p>
+
+<h3 class="wp-block-heading">Stacking</h3>
+<p>As different types of ensemble learners use different methods to create predictions, they have varying strengths and weaknesses; a bagging algorithm and a boosting algorithm that achieve similar overall results can be comparatively weak in one area and strong in another. In many cases, combining information from multiple unique types of ensemble learners can produce even greater overall performance, by balancing out their individual weaknesses to create a ‘super-model’. The downside of stacking is that it adds a lot of complexity, which might not be a good thing in our case as we are at risk of overfitting our small dataset again. Since any potential gains from this approach will likely be marginal I will avoid using it in this series, but it’s a technique that might be worth trying out on another dataset.</p>
+<h3 class="wp-block-heading">Tree ensembles are great!</h3>
+<p><a href="/python-for-fantasy-football-addressing-class-imbalance-part-2/">I said last time</a> that tree ensembles like random forests are pretty much the only machine learning technique you need to know about, so why is that?</p>
+<ul><li>They work with both categorical and continuous data, and can predict either type using regression or classification. You don’t need to do much preprocessing to start training models.</li><li>They don’t make any assumptions about your data, unlike something like logistic regression which assumes a linear relationship.</li><li>Unlike a single decision tree, it’s hard to overfit when using tree ensembles.</li><li>In practice they tend to achieve results that are at least as good as other techniques (aside from perhaps deep learning).</li><li>Contrary to popular belief, they aren’t a <a href="https://en.wikipedia.org/wiki/Black_box">‘black box’</a> technique that’s impossible to understand. As we will see in the remainder of this article, we can get a great idea of exactly what’s going on with just a few lines of code.</li></ul>
+<h2 class="wp-block-heading">Visualising decision trees</h2>
+<p>Remember the diagram of a decision tree from <a href="/python-for-fantasy-football-introduction-to-machine-learning/">part 5</a> that I drew in MS Paint? Obviously we can do better than that! Sklearn already has a package built-in so you can visualise decision trees from models you have built, but there is a really nice alternative called <a href="https://explained.ai/decision-tree-viz/index.html">‘</a><a href="https://explained.ai/decision-tree-viz/index.html"></a><a href="https://explained.ai/decision-tree-viz/index.html">dtreeviz</a><a href="https://explained.ai/decision-tree-viz/index.html">‘</a> which I will be using instead. The only downside is that installation can be a bit fiddly depending on what OS you use, so make sure you <a href="https://github.com/parrt/dtreeviz">follow the instructions</a> and try the following code if you get any errors:</p>
+<pre><pre class="brush: python; title: ; notranslate" title="">
+# First, follow the dtreeviz installation guide to install the latest versions of dtreeviz and graphviz
+# https://github.com/parrt/dtreeviz
+from dtreeviz.trees import *
+
+# Then run the code below if you get an error telling you that graphviz isn't in your system path (Windows users)
+# https://stackoverflow.com/a/44625895
+import os
+your_graphviz_install_directory = 'C:/Program Files (x86)/Graphviz2.38/bin/'
+os.environ["PATH"] += os.pathsep + your_graphviz_install_directory
+</pre></pre>
+<p>After running the usual steps to import and preprocess our data (you will see those in the <a href="https://github.com/twhelan22/python-for-fantasy-football">notebook</a>), we can start to look at some trees! RandomForestClassifier has a max_depth parameter, which restricts the size of the tree if you specify a value. I will create small trees here with just two levels so we can easily see what’s going on.</p>
+<pre><pre class="brush: python; title: ; notranslate" title="">
+# Train a random forest
+# By default the number of trees in the forest is 10, but this is changing to 100 soon, so I have used 100 here
+m = RandomForestClassifier(n_estimators=100, max_depth=2, random_state=42, n_jobs=-1)
+m.fit(X_train, y_train)
+
+# Extract a single tree from the forest to take a look at (index 3)
+estimator = m.estimators_[3]
+
+# Create our visualisation using dtreeviz
+viz = dtreeviz(estimator, X_train, y_train,
+               target_name='outcome', 
+               feature_names=X_train.columns, 
+               class_names=['no goal', 'goal'], # [class 0, class 1]
+               orientation='LR', # 'TD' (top-down) by default
+               show_node_labels=True)
+           
+viz
+</pre></pre>
+<figure class="wp-block-image"><img alt="" decoding="async" loading="lazy" src="/img/dtreeviz_1a.png"/></figure>
+<p>Well it certainly looks better than my MS Paint version, but what exactly is going on here? In this particular tree, ‘distance’ is the feature at the root (node 0). The model takes the following steps to arrive at the leaf nodes (2-6), where it makes a prediction about whether the outcome was ‘goal’ or ‘no goal’:</p>
+<ul><li>Is the distance from goal greater than or equal to 14.93 units, or less than that?</li><li>If it’s &gt;= 14.93, split on an event duration of 2.64 seconds.<ul><li>Make a prediction using the 756 observations from node 5 if the duration is &lt;2.64 seconds, otherwise make a prediction at node 6.</li></ul></li><li>If distance is &lt;14.93, split on body_part instead.<ul><li>If body_part is 0, go to node 2 and make a prediction, otherwise make a prediction at node 3.</li></ul></li></ul>
+<p>There’s quite a bit to unpack here, so let’s dig in a bit further. We can see that we have very few observations for a body_part of 2 or a duration of over 2.64 seconds. So what actually are these body_part values?</p>
+<pre><pre class="brush: python; title: ; notranslate" title="">
+# If you look closely you will see a custom label_encode function above which stores mappings in a dictionary
+# It's nice to be able to see which numbers correspond to which values!
+print(mappings['technique'])
+</pre></pre>
+<figure class="wp-block-image"><img alt="" decoding="async" loading="lazy" src="/img/body_part.png"/></figure>
+<p>OK, so if it’s a foot shot not too far from goal (distance &lt;14.93), this particular tree is predicting ‘goal’ quite a bit of the time, whereas if it’s another body part the model assigns a lower goal probability. That makes sense. On the other branch of the tree it’s interesting that a high duration ended up being a split point, as it’s hard to see how that could inform the model predictions from looking at the diagram. It would definitely be nice to have more data here!</p>
+<p>As we saw in <a href="/python-for-fantasy-football-addressing-class-imbalance-part-2/">part 7</a> there is a lot of overlap between the two classes, so the model is struggling to make confident predictions for each class. This is still a small tree, but we haven’t really got much closer to differentiating between ‘goal’ and ‘no goal’ at the leaf nodes.</p>
+<p>To illustrate, let’s take another look at the breast cancer dataset. I’ve picked a random observation to look at, showing it’s path through the tree to arrive at a prediction about whether the features indicate a ‘malignant’ or ‘benign’ tumour.</p>
+<pre><pre class="brush: python; title: ; notranslate" title="">
+# Set random seed for this notebook cell for reproducible results
+np.random.seed(42)
+
+bc = load_breast_cancer()
+
+X_bc = bc.data
+y_bc = bc.target
+
+m = RandomForestClassifier(n_estimators=100, max_depth=2, n_jobs=-1)
+m.fit(X_bc, y_bc)
+
+# Extract single tree (index 4)
+estimator_bc = m.estimators_[4]
+
+# pick random observation to investigate
+obs_bc = bc.data[np.random.randint(0, len(bc.data)),:]
+
+viz = dtreeviz(estimator_bc, X_bc, y_bc,
+               target_name='cancer', 
+               feature_names=bc.feature_names, 
+               class_names=['malignant', 'benign'],
+               orientation='LR',
+               X=obs_bc)
+           
+viz
+</pre></pre>
+<figure class="wp-block-image"><img alt="" decoding="async" loading="lazy" src="/img/dtreeviz_2a.png"/></figure>
+<p>Even though we still only have a max tree depth of two, our model is able to predict ‘malignant’ or ‘benign’ with high confidence! In this case the random observation we picked had an ‘area error’ of &lt;34.85 and a ‘worst perimeter’ of &lt;104.10, so this particular tree is assigning a high probability of a ‘benign’ tumour. If we increased the tree depth further, we might even be able to predict ‘benign’ with 100% certainty. Most of the ‘malignant’ tumours appear to have a large ‘area error’ and a ‘worst concavity’ of &gt;0.2, which makes it easy for the model to spot them. If only we had features that good…</p>
+<p>Let’s take a look at a bigger tree, this time with max_depth=3.</p>
+<pre><pre class="brush: python; title: ; notranslate" title="">
+# Set random seed for this notebook cell for reproducible results
+np.random.seed(42)
+
+m = RandomForestClassifier(n_estimators=100, max_depth=3, n_jobs=-1)
+m.fit(X_train, y_train)
+
+# Extract a single estimator (tree number 6)
+estimator = m.estimators_[6]
+
+# Pick a random observation to investigate
+obs = X_train.values[np.random.randint(0, len(X_train.values)),:]
+
+viz = dtreeviz(estimator, X_train, y_train,
+               target_name='outcome', 
+               feature_names=X_train.columns, 
+               class_names=['no goal', 'goal'],
+               orientation='TD',
+               fancy=True, # simplifies the viz (no histogram) if set to False
+               X=obs)
+           
+viz.view() # opens viz in a web browser (useful for bigger trees or small screens)
+</pre></pre>
+<figure class="wp-block-image"><img alt="" decoding="async" loading="lazy" src="/img/dtreeviz_3a.png"/></figure>
+<p>In this case the tree is splitting on ‘open_goal’ first, which is pretty interesting, with various features used after that. A shot with distance=28.02 and duration=1.26 results in a ‘no goal’ prediction. If we want the probability estimate for ‘no goal’, the model will take the percentage of ‘no goal’ outcomes from the 506 observations at that leaf node. There aren’t many examples of open_goal=1, but unsurprisingly it looks like the model would predict ‘goal’ in those situations! Hopefully this gives you a much better idea of what exactly is going on inside the random forest algorithm.</p>
+<h2 class="wp-block-heading">Random forest hyperparameters</h2>
+<p>Most machine learning algorithms have different settings, called ‘hyperparameters’, that you can adjust to change the performance of your model. We’ve already seen some of them:</p>
+<ul><li>n_estimators = number of trees in the forest. Typically adding more trees won’t decrease model performance, but it will increase the training time significantly.</li><li>max_depth = maximum depth of the tree. This is set to ‘None’ by default, which could result in a lot of splits if the tree is struggling to make good predictions.</li><li>n_jobs = number of processor cores to use. -1 will use all of them in parallel.</li><li>random_state = the random seed to use. It’s useful to set this when comparing models, but you might want to remove it at the end for a final model.</li></ul>
+<p>There are lots more hyperparameters, but the extra ones we will focus on are:</p>
+<ul><li>max_features = the maximum number of features to look at for a particular split. By default the model will use the square root of the total number of features.</li><li>min_samples_leaf = the minimum number of samples allowed at each leaf node. By default this is set to one, so the tree might carry on splitting to a point where it starts to overfit the data.</li></ul>
+<p>In part 10, I’ll show you how to tune the hyperparameters for random forests and XGBoost to see if we can find a combination that improves our model. For now, I’ve created an interactive notebook widget so you can play around with different values of these hyperparameters and see how this affects the split points of a particular tree. <a href="https://github.com/twhelan22/python-for-fantasy-football/blob/master/8%20-%20Understanding%20Random%20Forests/Python%20for%20Fantasy%20Football%20-%20Understanding%20Random%20Forests.ipynb">Open up the notebook</a> to check it out if you haven’t already!</p>
+<h2 class="wp-block-heading">Feature importance</h2>
+<p>Feature importance is so important that part 9 will cover it in full detail, but I wanted to give you a quick preview here, as it’s something you will want to rely on heavily when trying to interpret your models. Note that this isn’t the same as the model coefficients you might have seen elsewhere! Feature importance is built into sklearn (of course), but this is another situation where I’m going to recommend an alternative approach, as the sklearn version <a href="https://explained.ai/rf-importance/index.html">can give some weird results.</a> We’ll be using the <a href="https://github.com/parrt/random-forest-importances">‘rfpimp’</a> module, which uses a method called ‘permutation importance’. You can read the full details <a href="https://explained.ai/rf-importance/index.html">here</a>, but the basic steps of this technique are as follows:</p>
+<ol><li>Fit a model and calculate the score.</li><li>Randomly shuffle the values in a feature column, so they have no meaningful relationship to the target classes we are trying to predict.</li><li>Recalculate the model score. A worse score means that the column has some useful predictive value, and vice versa. The feature importance is the difference between the baseline score and the new score.</li><li>Repeat for every feature column.</li></ol>
+<p>Let’s take a look at the feature importance for our model. We can use the entire dataset and calculate the brier loss scores using cross-validation, before plotting feature importance using rfpimp.</p>
+<pre><pre class="brush: python; title: ; notranslate" title="">
+m = RandomForestClassifier(n_estimators=100, n_jobs=-1, random_state=42)
+cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+
+X = features_le
+y = labels
+
+m.fit(X, y)
+scores = cross_val_score(m, X, y, cv=cv, scoring='brier_score_loss')
+print(scores.mean()*-1) # Why is this negative by default? See https://stackoverflow.com/a/27364692
+
+from rfpimp import * # pip install rfpimp first
+imp = importances(m, X, y, n_samples=-1, metric='brier_score_loss')
+viz = plot_importances(imp)
+viz
+</pre></pre>
+<figure class="wp-block-image"><img alt="" decoding="async" loading="lazy" src="/img/imp_1a.png"/></figure>
+<p>We are getting a brier loss of roughly 0.0783, but it looks like some of our features have little to no impact on model performance! Since events like redirects are rare, it makes sense that the model isn’t making much use of them. Let’s see what happens when we get rid of some features:</p>
+<pre><pre class="brush: python; title: ; notranslate" title="">
+# Get a list of the features where importance is lower than a threshold, and filter them out
+def elim_feats(X, imp=imp, thresh=0.005):
+    return X[list(imp[imp.values&amp;amp;amp;gt;=thresh].index.values)]
+
+X_new = elim_feats(X=X)
+
+m.fit(X_new, y)
+scores = cross_val_score(m, X_new, y, cv=cv, scoring='brier_score_loss')
+print(scores.mean()*-1)
+
+imp = importances(m, X_new, y, n_samples=-1, metric='brier_score_loss')
+viz = plot_importances(imp)
+viz
+</pre></pre>
+<figure class="wp-block-image"><img alt="" decoding="async" loading="lazy" src="/img/imp_2b.png"/></figure>
+<p>So we just made our model simpler and our loss improved to 0.0777 as a result?</p>
+
+<p>I’ll leave it there for now, but we will definitely be looking at feature engineering more in the next article!</p>
+<h2 class="wp-block-heading">Conclusion</h2>
+<p>Thanks for reading! Hopefully you are starting to get a much better understanding of what is actually going on behind the scenes inside random forest models. If you found this article useful, please share it on social media, and keep an eye out for part 9! Thanks to <a href="http://statsbomb.com">StatsBomb</a> for the data.</p>
+</main>
+<footer>FantasyFutopia, 2017–2019. Archived; no comments, forms or affiliate links.</footer></body></html>

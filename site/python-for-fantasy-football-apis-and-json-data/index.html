@@ -1,0 +1,153 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Python for Fantasy Football – APIs and JSON Data – FantasyFutopia (archive)</title><link rel="canonical" href="https://www.fantasyfutopia.com/python-for-fantasy-football-apis-and-json-data/"><link rel="stylesheet" href="/style.css"></head>
+<body><div class="banner">This site is archived (2017–2019). Something new is coming.</div><header class="s"><a href="/">FantasyFutopia</a></header><main><h1>Python for Fantasy Football – APIs and JSON Data</h1><p class="meta">2018-10-25</p><p>Welcome to part 4 of the Python for Fantasy Football series! As always, if you missed any of the previous parts, go back and check those out first before reading any further. In <a href="/python-for-fantasy-football-getting-and-cleaning-data/">part 3</a> I mentioned that your first port of call when looking to access data on a website should be the API (if there is one). I said last week that I wasn’t going to scrape the FPL site, but thanks to all the excellent feedback (keep it coming!) I have since found out that the site does in fact have an API. There is no documentation and the API isn’t publicly listed anywhere as far as I can tell, which makes me think that it’s not primarily intended for public use. However, there are already plenty of guides around showing people how to access it, so since we will be using JSON files later in the series I thought I would do a quick run-through of how to do so in Python. It goes without saying that this data should not be used commercially, as stated in the site terms and conditions.</p>
+<h1>Introduction to JSON</h1>
+<p>JSON (JavaScript Object Notation) is a text file format designed to facilitate the transmission of data from server to browser. Whilst initially intended to be used with JavaScript, there are libraries for creating and parsing JSON data in many of the most popular programming languages. The structure is similar to a nested Python dictionary, as you can see from the example below (<a href="https://en.wikipedia.org/wiki/JSON">via Wikipedia</a>):</p>
+<pre class="brush: jscript; title: ; notranslate" title="">
+{
+"firstName": "John",
+"lastName": "Smith",
+"isAlive": true,
+"age": 27,
+"address": {
+"streetAddress": "21 2nd Street",
+"city": "New York",
+"state": "NY",
+"postalCode": "10021-3100"
+},
+"phoneNumbers": [
+{
+"type": "home",
+"number": "212 555-1234"
+},
+{
+"type": "office",
+"number": "646 555-4567"
+},
+{
+"type": "mobile",
+"number": "123 456-7890"
+}
+],
+"children": [],
+"spouse": null
+}
+</pre>
+<p>The FPL API has several JSON files that you can access, provided that you are logged in to the site (see <a class="broken_link" href="https://www.oddsonfpl.com/how-to-get-data-from-the-fantasy-premier-league-api/">here</a> for an exhaustive list; note that you will need to be a league member or have authorisation to view some of these). I’ll go through a brief run-down of how to read JSON data into Python and access the pieces of information you want, showing you a few examples from the FPL API. To finish, I’ll look at player ownership in a mini-league to give an idea of what you can do with the data.</p>
+<h1>Loading JSON files into Python</h1>
+<p>To load JSON files into Python, we can use the ‘json’ library. We’ll also need to use ‘requests’ first to grab the data from the FPL API. The code below shows a standard function that you should be able to use to get any JSON file from the web, provided you have a link to it.</p>
+<pre class="brush: python; title: ; notranslate" title="">
+import pandas as pd
+import json
+import requests
+from pandas.io.json import json_normalize
+
+# Define a function to get info from the FPL API and save to the specified file_path
+# It might be a good idea to navigate to the link in a browser to get an idea of what the data looks like
+def get_json(file_path):
+r = requests.get('https://fantasy.premierleague.com/drf/bootstrap')
+jsonResponse = r.json()
+with open(file_path, 'w') as outfile:
+json.dump(jsonResponse, outfile)
+
+# Run the function and choose where to save the json file
+get_json('D:/Tom/Downloads/fpl.json')
+
+# Open the json file and print a list of the keys
+with open('D:/Tom/Downloads/fpl.json') as json_data:
+d = json.load(json_data)
+print(list(d.keys()))
+</pre>
+<pre>['elements', 'total-players', 'player', 'element_types', 'watched', 'next-event', 'phases', 'stats', 'game-settings',
+ 'current-event', 'teams', 'stats_options', 'last-entry-event', 'entry', 'next_event_fixtures', 'events']</pre>
+<h1>Parsing JSON</h1>
+<p>We can see that this file has several keys, each corresponding to a different subset of the data. Feel free to play around with each of these if you like, but I’ll give you a few examples of the most useful parts here. To get player information, we need to access the ‘elements’ key. We could write some code to parse this out manually, but luckily the ‘json_normalize’ function makes things a lot easier for us:</p>
+<pre class="brush: python; title: ; notranslate" title="">
+# See https://pandas.pydata.org/pandas-docs/stable/generated/pandas.io.json.json_normalize.html
+df = json_normalize(d['elements'])
+print('Columns:\n', list(df), '\n')
+print('Dataframe Head:\n', df.head())
+</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/players-json.png"/></p>
+<p>You can see that it’s not that difficult to get all the player info we would want from the FPL site! As for teams, that’s just as easy:</p>
+<pre class="brush: python; title: ; notranslate" title="">
+df = json_normalize(d['teams'])
+print('Columns:\n', list(df), '\n')
+print('Dataframe Head:\n', df.head())
+</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/teams-json.png"/></p>
+<p>If you’ve ever wondered how they get the fixture difficulty ratings, you might find the answer in there. In case you aren’t familiar with how bonus points are calculated, you can take a look at the game settings:</p>
+<pre class="brush: python; title: ; notranslate" title="">
+# The (not so) secret sauce (see https://www.premierleague.com/news/106533)
+df = json_normalize(d['game-settings'])
+print('Columns:\n', list(df), '\n')
+</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/game-settings.png"/></p>
+<p>As well as the above, there are other links we can access. Here is an example of how to get the standings for a particular league – in this case the overall standings. We could use the function from earlier, but to avoid having to download the JSON file and save it to disk we can use a much shorter piece of code:</p>
+<pre class="brush: python; title: ; notranslate" title="">
+d = json.loads(requests.get('https://fantasy.premierleague.com/drf/leagues-classic-standings/313').text)
+print('Keys:\n', list(d.keys()), '\n')
+df = json_normalize(d['standings'])
+print('Columns:\n', list(df), '\n')
+print('Dataframe Head:\n', df.head())
+</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/league-json.png"/></p>
+<p>Hmm, not quite what we were after; the values we want are all inside the ‘results’ column. Instead, we can access the results key directly in json_normalize to parse out the league standings:</p>
+<pre class="brush: python; title: ; notranslate" title="">
+# See json_normalize documentation for further info
+df = json_normalize(d['standings'], 'results')
+print('Columns:\n', list(df), '\n')
+print('Dataframe Head:\n', df.head())
+</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/league2-json.png"/></p>
+<p>As far as team names go this is a bit of a poor effort in my opinion! You can also see the data for your own team if you like by using the code below:</p>
+<pre class="brush: python; title: ; notranslate" title="">
+d = json.loads(requests.get('https://fantasy.premierleague.com/drf/entry/5746258').text)
+print('Keys:\n', list(d.keys()), '\n')
+df = json_normalize(d['entry'])
+print('Columns:\n', list(df), '\n')
+print('Dataframe Head:\n', df.head())
+</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/own-team-json.png"/></p>
+<p>You will notice that my team is terrible! I actually didn’t play FPL this season, so this is just a random team I made to allow me to write this article. When FantasyBet were offering a real-money version with only 3808 entries it was hard to get excited for the free game, especially when the prize-pool looks like this:</p>
+
+<p>If you missed it, don’t worry! FantasyBet also offer daily fantasy games where you can pick a team for just one gameweek and compete for cash prizes. This week there is a tournament with a guaranteed prize-pool of £3000, so make sure to check that out if you haven’t already!</p>
+
+<h1>FPL Mini-League Ownership</h1>
+<p>Accessing the data is just the tip of the iceberg, and people have already made some pretty cool Python scripts to do all sorts of things using the API. For example, see <a href="https://github.com/spinach/FantasyPremierLeague-Api.py/tree/python3">here</a> for a script that allows you to find out captain choices and overall player ownership for a specific gameweek in any mini-league! I actually edited the script slightly to clean up the player names and automatically calculate ownership percentages; you can find it on my GitHub <a href="https://github.com/twhelan22/FantasyPremierLeague-Api.py">here</a>. You can run this script from the command line as suggested in the readme, or alternatively you can run a script inside a Jupyter notebook using the method below:</p>
+<pre class="brush: python; title: ; notranslate" title="">
+# Note that this code might not work if you aren't in this league... I suggest replacing the league ID with one of your own mini-leagues
+# If you pick a league with lots of players, this will take a while!
+import os
+filepath='C:/Users/Tom/Python/36/FantasyPremierLeague-Api.py-python3'
+# Change directory to the filepath
+os.chdir(filepath)
+# Run Python script with specified paramaters
+%run playersPickedInLeague.py --league 14226 --gameweek 9 --type classic
+</pre>
+<p>The script will create two csv files in the same directory, one with captain ownership and another with overall player ownership for the particular gameweek. As a side note, if you haven’t already checked out the <a href="http://fiso.co.uk/forum/viewforum.php?f=18">FISO forums</a>, they are a great resource for fantasy football, particularly FPL. If you load the files you will see a breakdown of ownership percentages for the FISO forum mini-league in gameweek 9:</p>
+<pre class="brush: python; title: ; notranslate" title="">
+# Note that you will need to update the league id and gw number here to match your input paramaters
+captain = pd.read_csv(filepath + '/captain_14226_gw9.csv')
+picked = pd.read_csv(filepath + '/picked_14226_gw9.csv')
+
+print('The FISO forum mini-league captains, GW9:\n', captain.head(), '\n')
+print('The FISO forum mini-league player ownership, GW9:\n', picked.head())
+</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/fiso-json.png"/></p>
+<pre class="brush: python; title: ; notranslate" title="">
+# Plot the top 20 owned players
+sns.set(style='whitegrid')
+sns.set_color_codes('muted')
+f, ax = plt.subplots(figsize=(12, 10))
+sns.barplot(x='percent', y='name', data=picked.head(20), color='b')
+ax.set(ylabel='', xlabel='FISO mini-league ownership percentage (top 20)')
+sns.despine(left=True, bottom=True)
+</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/fiso-plot-captains.png"/></p>
+<p><img alt="" decoding="async" loading="lazy" src="/img/fiso-plot.png"/></p>
+<h1>Conclusion</h1>
+<p>That’s it for now! Hopefully the last part of the article has given you some ideas of the things you could create using the FPL API. Make sure to share any tools or visualisations in the comments here, or on Twitter @FantasyFutopia or @tom_whelan! The next part might take a little bit longer to write, but hopefully the wait will be worth it! I’ll be publishing the first of several articles on machine learning, looking at how you can create your own xG models in Python.</p>
+<p>If you enjoyed the article, please don’t forget to share it on social media – it really helps!</p>
+</main>
+<footer>FantasyFutopia, 2017–2019. Archived; no comments, forms or affiliate links.</footer></body></html>

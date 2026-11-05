@@ -1,0 +1,295 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Python for Fantasy Football – Matchup Adjustment – FantasyFutopia (archive)</title><link rel="canonical" href="https://www.fantasyfutopia.com/python-for-fantasy-football-matchup-adjustment/"><link rel="stylesheet" href="/style.css"></head>
+<body><div class="banner">This site is archived (2017–2019). Something new is coming.</div><header class="s"><a href="/">FantasyFutopia</a></header><main><h1>Python for Fantasy Football – Matchup Adjustment</h1><p class="meta">2018-10-11</p><p>Welcome to part two ‘Python for Fantasy Football’ series! If you missed part 1, <a href="/python-for-fantasy-football-introduction/">click here</a> to go back and work through that first. In this article I’ll go through a few more useful things we can do with the pandas library, as well as introducing string formatting and functions. Our aim here is to generate projected goals for each team for week 9 of the 18/19 EPL season, adjusted for opponent strength. There are a few things to keep in mind about this series that I didn’t discuss in part 1:</p>
+<ul>
+<li>I am by no means an expert coder; I’m self taught and have only been using Python for a relatively short period of time. This series is as much to reinforce the concepts in my own mind as it is to teach them to you. If you think there is a better way to do something than the methods I’m using here, you’re probably right!</li>
+<li>I’m trying to introduce as many useful tricks and tools as I can whilst also keeping the articles from being too long, so I don’t have time to explain everything fully. If you get stuck, Google for help! Feel free to ask me any questions on Twitter also.</li>
+<li>I might repeat things and go step-by-step instead of doing everything as efficiently as possible. If you find something too easy, great!</li>
+<li>I’ll try to keep these semi-regular, but I definitely won’t be releasing subsequent parts as quickly as the first two. If you get fed up of waiting there are plenty more free tutorials around elsewhere.</li>
+<li>I will upload any necessary data files and notebooks to my GitHub account <a href="https://github.com/twhelan22/python-for-fantasy-football">here</a>.</li>
+</ul>
+<p>With that said, let’s get started by loading the xG csv we used in part 1.</p>
+<pre class="brush: python; title: ; notranslate" title="">
+import pandas as pd
+
+# Load data
+xg_data = pd.read_csv('D:/Tom/Downloads/epl_xg.csv')
+
+# Add columns again for goal difference, expected goal difference and non-penalty expected goal difference
+# Alternatively, you can save the dataframe we made in part 1 using the code xg_data.to_csv('D:/Tom/Downloads/xg_data_inc_gd.csv'), and then load that csv here instead
+xg_data['GD'] = xg_data['G'] - xg_data['GA']
+xg_data['xGD'] = xg_data['xG'] - xg_data['xGA']
+xg_data['NPxGD'] = xg_data['NPxG'] - xg_data['NPxGA']
+xg_data
+</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/xg_data_new_columns.png"/></p>
+<h1>String formatting</h1>
+<p>To enable us to carry out further analysis, it would be great to have per game versions of each stat as well as the totals. We could do this one by one like we did with the goal difference columns, but there is a better way! If you managed to take the free introductory course on DataCamp I recommended in part 1 then you might already know about string formatting, but if not take a look at the code below and see if you can figure out what it’s doing:</p>
+<pre class="brush: python; title: ; notranslate" title="">
+name = 'Tom'
+print('My name is %s' % name)
+
+age = 28
+print('My name is %s and I am %d' % (name, age))
+</pre>
+<p>My name is Tom<br/>
+My name is Tom and I am 28</p>
+<p>The string formatting operator, %, allows you to easily pass variables to a string. You can see from the examples above that ‘%s’ will insert a string in that location, whereas ‘%d’ will insert an integer – for a complete list of the other symbols that can be used with % see here. We can use this trick to quickly generate the new column names for our per game stats. It’s always worth keeping in mind that if you have to repeat the same or similar code more than once, there is likely a quicker way to do things! First, we need to get a list of the column names we are interested in, then we can iterate over that list and generate a new column each time:</p>
+<pre class="brush: python; title: ; notranslate" title="">
+# Print a list of the columns in the dataframe
+
+print(list(xg_data))
+</pre>
+<p>[‘Team’,  ‘Games’,  ‘G’,  ‘GA’,  ‘xG’,  ‘xGA’,  ‘NPxG’,  ‘NPxGA’,  ‘GD’,  ‘xGD’,  ‘NPxGD’]</p>
+<pre class="brush: python; title: ; notranslate" title="">
+# Create a list of the columns we want
+# We could have done this programmatically by removing the unwanted columns from the list above, but in this case it's just as easy to copy and paste!
+cols = ['G', 'GA', 'xG', 'xGA', 'NPxG', 'NPxGA', 'GD', 'xGD', 'NPxGD']
+
+# Create new columns for per game versions of each stat in the cols list
+# This code iterates through the list and adds new columns for each item in the list, using string formatting to create the column names
+# i.e. for each column in the cols list, create a new column where col name = original col name + '_pg' and col value = original column value / games
+for col in cols:
+xg_data['%s_pg' % col] = xg_data[col] / xg_data['Games']
+
+xg_data
+</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/xg_data_pg.png"/></p>
+<p>Just in case you weren’t 100% sure that using Python is worthwhile, hopefully that short bit of code will convince you! This confirms what we knew already – Arsenal are scoring an extra goal per game right now, which is unsustainable even if you account for some modelling error.</p>
+<p>Now we can get onto the main subject of this article, which is how to project stats for upcoming fixtures. In this case we will try to predict the average goals we can expect for each team in week 9 of the EPL season using xG_pg and xGA_pg. Obviously we only have an 8 game sample here so it’s hard to fully trust the results, but you will be able to use this method for any stats you want (shots, crosses etc). First, we need to get the upcoming fixtures, and to make things easier there is a csv file provided on GitHub.</p>
+<pre class="brush: python; title: ; notranslate" title="">
+# Load fixtures
+fixtures = pd.read_csv('D:/Tom/Downloads/epl_fixtures.csv')
+fixtures
+</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/fixtures.png"/></p>
+<h1>Cleaning data</h1>
+<p>Unfortunately in this data we have ‘Wolves’ instead of ‘Wolverhampton Wanderers’, a common problem if your data comes from multiple sources. Luckily it’s easy to solve in this case:</p>
+<pre class="brush: python; title: ; notranslate" title="">
+# Replace 'Wolves' with 'Wolverhampton Wanderers'
+# Note that you can look in a specific column or row if you don't want to replace values in the entire dataframe
+fixtures = fixtures.replace('Wolves', 'Wolverhampton Wanderers')
+fixtures
+</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/fixtures_clean.png"/></p>
+<h1>Merging dataframes</h1>
+
+<pre class="brush: python; title: ; notranslate" title="">
+# Filter xg_data to only include the columns we want
+xg_data_pg = xg_data[['Team', 'xG_pg', 'xGA_pg']]
+
+# Merge fixtures and xg_data_pg (see https://pandas.pydata.org/pandas-docs/stable/merging.html for more info on combining pandas dataframes)
+# This will get home team stats by matching the 'Home_Team' column with the 'Team' column using left_on and right_on
+fixtures = pd.merge(fixtures, xg_data_pg, left_on='Home_Team', right_on='Team')
+fixtures
+</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/fixtures_merge_1.png"/></p>
+<pre class="brush: python; title: ; notranslate" title="">
+# We can repeat to get the away team stats
+fixtures = pd.merge(fixtures, xg_data_pg, left_on='Away_Team', right_on='Team')
+fixtures
+</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/fixtures_merge_2.png"/></p>
+<h1>Removing and renaming dataframe columns</h1>
+<p>Whilst combining dataframes is a very useful tool in a lot of situations, in this case we have to remove the unwanted ‘Team_x’ and ‘Team_y’ columns and rename the others to avoid confusion:</p>
+<pre class="brush: python; title: ; notranslate" title="">
+# Remove unwanted columns
+# By default, the axis argument is set to 0, which refers to rows
+# In this case we want to drop columns, so we need to specify axis=1
+fixtures = fixtures.drop(['Team_x', 'Team_y'], axis=1)
+fixtures
+</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/fixtures_merge_3.png"/></p>
+<pre class="brush: python; title: ; notranslate" title="">
+# We have already seen that a list in Python is represented using square brackets []
+# Curly brackets {} are used for dictionaries
+# In a dictionary, the item on the left of the colon is the key, whilst the item on the right is the value
+# We can use a dictionary to rename the columns in the fixtures dataframe
+# This code will look for the dictionary keys in the column names, and replace them with the dictionary values
+fixtures = fixtures.rename(columns={'xG_pg_x': 'xG_pg_home_team', 'xGA_pg_x': 'xGA_pg_home_team', 'xG_pg_y': 'xG_pg_away_team', 'xGA_pg_y': 'xGA_pg_away_team'})
+fixtures
+
+# Note that we could have assigned the dictionary to a variable instead:
+# colnames = {'xG_pg_x': 'xG_pg_home', 'xGA_pg_x': 'xGA_pg_home', 'xG_pg_y': 'xG_pg_away', 'xGA_pg_y': 'xGA_pg_away'}
+# fixtures = fixtures.rename(columns=colnames)
+</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/fixtures_merge_4.png"/></p>
+<h1>The map function</h1>
+<p>The other option is to use the map function to add the values from xg_data to fixture. Let’s load the fixtures csv again so that we can try this method instead:</p>
+<pre class="brush: python; title: ; notranslate" title="">
+# Load fixtures data again and assign to a new variable, fixtures2
+fixtures2 = pd.read_csv('D:/Tom/Downloads/epl_fixtures.csv')
+fixtures2 = fixtures2.replace('Wolves', 'Wolverhampton Wanderers')
+
+# First, set the 'Team' column of xg_data_pg to be the dataframe index
+xg_data_pg.set_index('Team', inplace=True)
+xg_data_pg
+
+# inplace=True tells Python to complete the operation in place, avoiding the need to assign it back to a variable
+# Alternatively we could have used the following code:
+# xg_data_pg = xg_data_pg.set_index('Team')
+</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/map_1.png"/></p>
+<pre class="brush: python; title: ; notranslate" title="">
+# Now we can use map to look for the values in a column from fixtures2 and get the corresponding value from xg_data_pg
+# The code below looks for each 'Home_Team' in fixtures2 in the index of xg_data_pg, and maps the corresponding xG_pg back to fixtures2
+fixtures2['xG_pg_home_team'] = fixtures2['Home_Team'].map(xg_data_pg['xG_pg'])
+
+# We can repeat to get all the stats we want (of course there is a quicker way, but in this case there are only a few columns so it's not too bad to go one by one)
+fixtures2['xGA_pg_home_team'] = fixtures2['Home_Team'].map(xg_data_pg['xGA_pg'])
+fixtures2['xG_pg_away_team'] = fixtures2['Away_Team'].map(xg_data_pg['xG_pg'])
+fixtures2['xGA_pg_away_team'] = fixtures2['Away_Team'].map(xg_data_pg['xGA_pg'])
+fixtures2
+</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/map_2.png"/></p>
+<p>In this case using map is probably easier, but it often won’t be – for instance if we already had matching column names in the dataframes we were combining.</p>
+<h1>Generating projected stats</h1>
+
+<pre class="brush: python; title: ; notranslate" title="">
+# Work out the average xGA_pg
+xG_avg = xg_data_pg['xG_pg'].mean()
+
+# Copy fixtures2 to a new dataframe called matchups (you could just add the new columns directly to fixtures2 if you wanted)
+matchups = fixtures2.copy()
+
+# Add new columns for adjusted xG for home and away team
+matchups['xG_adjusted_home_team'] = (matchups['xG_pg_home_team'] * matchups['xGA_pg_away_team']) / xG_avg
+matchups['xG_adjusted_away_team'] = (matchups['xG_pg_away_team'] * matchups['xGA_pg_home_team']) / xG_avg
+matchups
+</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/projected_1.png"/></p>
+<p>Ideally to make these numbers more useful, you will want to also factor in home advantage. Some teams will have a bigger home advantage than others due to various factors (e.g. level of support, different tactics of team or opponent etc), so if we had a larger sample our best option would be to use xG_pg at home or away rather than overall xG_pg. For now, a quick way to do this is to take the difference in average goals scored at home vs all matches. Since 14/15 teams have scored 1.1x more goals at home, with away teams scoring 0.87x as many goals.</p>
+<pre class="brush: python; title: ; notranslate" title="">
+# Account for home advantage
+matchups['xG_adjusted_home_team'] = matchups['xG_adjusted_home_team'] * 1.1
+matchups['xG_adjusted_away_team'] = matchups['xG_adjusted_away_team'] * 0.87
+matchups
+</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/projected_2.png"/></p>
+<h1>Sense checking values</h1>
+<p>To check whether these numbers are realistic, let’s compare them to the actual implied goal odds set by the bookies. I’ve already done the hard work of providing these in another csv. Note that I am writing this quite far ahead of the week 9 fixtures, so at least in theory these numbers will get more accurate as we move closer to kickoff, but they shouldn’t be too far off.</p>
+<pre class="brush: python; title: ; notranslate" title="">
+# Load bookies implied goal totals
+bookies = pd.read_csv('D:/Tom/Downloads/epl_week_9_implied_goals.csv')
+
+# Merge with matchups (here merging works well because we have the Home_Team and Away_Team columns in both dataframes)
+matchups = pd.merge(matchups, bookies)
+
+# Calculate difference in goal totals
+matchups['home_goals_diff'] = matchups['xG_adjusted_home_team'] - matchups['Bookies_Home_Goals']
+matchups['away_goals_diff'] = matchups['xG_adjusted_away_team'] - matchups['Bookies_Away_Goals']
+
+# Plot the results using the code from part 1
+from matplotlib import pyplot as plt
+import seaborn as sns
+
+# Set the plot style and colour palette to use
+sns.set(style='whitegrid')
+sns.set_color_codes('muted')
+
+# Initialize the matplotlib figure (f) and axes (ax), and set width and height of the plot
+# In this case we want two plots, one each for home and away teams
+# We can plot these on top of each other and use a shared x axis by calling nrows=2 and sharex=True
+f, (ax1, ax2) = plt.subplots(nrows=2, figsize=(7, 10), sharex=True)
+
+# Create the plots, choosing the axes, the variables for each axis, the data source and the colour
+sns.barplot(x='home_goals_diff', y='Home_Team', data=matchups, color='b', ax=ax1)
+sns.barplot(x='away_goals_diff', y='Away_Team', data=matchups, color='b', ax=ax2)
+
+# Rename the axes, setting y axis label to be blank
+ax1.set(xlabel='', ylabel='', title='Home Teams')
+ax2.set(xlabel='Difference in bookies implied goals vs our projected goals', ylabel='', title='Away Teams')
+
+# Remove the borders from the plot
+sns.despine(left=True, bottom=True)
+</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/bookies_vs_projected.png"/></p>
+<p>Generally our projected numbers don’t look that bad despite using a pretty basic method, with the big differences being Arsenal (unsustainable goalscoring) and Bournemouth (different style to last season). It’s highly likely that the bookies are using a larger sample of data than us (amongst other things), as well as adjusting a bit for how much action they expect from the public on each team. If you don’t think it’s realistic to expect Manchester City to score over 3.5 goals on average at home to Burnley, think again!</p>
+<h1>Creating functions</h1>
+<p>The final step in this part is to create a function to calculate the win and clean sheet odds for each team using our average projected goal numbers. We could do this without a function, but by wrapping our code inside a function we can use it again and again without having to re-type the same lines more than once. There is almost certainly a better way to achieve the same results than the code I have written here, so if you like feel free to play around and see if you can come up with an alternative! If you aren’t sure what a part of the code is doing, try to run those lines separately, or add print statements inside the function to help explain.</p>
+<pre class="brush: python; title: ; notranslate" title="">
+# Import the numpy module (package designed for scientific computing)
+import numpy as np
+
+# Define a function to calculate win and clean sheet percentages based on average goal totals for each team
+# The general format is
+# def function_name(function_inputs):
+#     do things
+#     return result
+# It's always a good idea to include a 'docstring' in your function, which is a description of how to use the function surrounded by triple quotes
+def win_cs(df, home_goals_col, away_goals_col, n=10000):
+"""Generates win and clean sheet percentages for each row of a dataframe, df, by using average goal totals from home_goals_col and away_goals_col
+n = number of sims to run, set at 10000 by default"""
+
+# Create blank lists for wins and clean sheets
+home_win_list = []
+away_win_list = []
+home_cs_list = []
+away_cs_list = []
+
+# Iterate through each row (i) in the dataframe
+for i in range(len(df)):
+# Get home and away projected goals for that row
+avg_home_goals = df.iloc[i][home_goals_col]
+avg_away_goals = df.iloc[i][away_goals_col]
+
+# Simulate home and away goals by drawing from a random poisson distribution n times
+home_goals_sim = np.random.poisson(avg_home_goals, n)
+away_goals_sim = np.random.poisson(avg_away_goals, n)
+
+# Create a new dataframe, sim, with the columns as the results
+sim = pd.DataFrame({'home_score': home_goals_sim, 'away_score': away_goals_sim})
+
+# Add new columns by using np.where() to evaluate conditional expressions, setting 1 for true and 0 for false
+sim['home_win'] = np.where(sim['home_score'] &amp;gt; sim['away_score'], 1, 0)
+sim['away_win'] = np.where(sim['away_score'] &amp;gt; sim['home_score'], 1, 0)
+sim['home_clean_sheet'] = np.where(sim['away_score'] == 0, 1, 0)
+sim['away_clean_sheet'] = np.where(sim['home_score'] == 0, 1, 0)
+
+# Sum the number of each result and divide by total number of sims to get percentages
+# Append the result to the corresponding list each time
+# As we iterate through the dataframe the win and clean sheet percentages for each row will be added to the end of the lists, until eventually we have values for each row
+home_win_list.append(sim['home_win'].sum() / n)
+away_win_list.append(sim['away_win'].sum() / n)
+home_cs_list.append(sim['home_clean_sheet'].sum() / n)
+away_cs_list.append(sim['away_clean_sheet'].sum() / n)
+
+# Add new columns to the input dataframe from the lists containing win and clean sheet percentages
+df['home_win'] = np.asarray(home_win_list)
+df['away_win'] = np.asarray(away_win_list)
+df['home_clean_sheet'] = np.asarray(home_cs_list)
+df['away_clean_sheet'] = np.asarray(away_cs_list)
+
+return df
+
+# Run our new function, specifying the paramaters we want as inputs
+# Note that because we set n=10000 when we defined the function, we don't need to set a value of n here
+matchups = win_cs(df=matchups, home_goals_col='xG_adjusted_home_team', away_goals_col='xG_adjusted_away_team')
+
+# Check the results (note how you can re-order the columns)
+displaycols = ['Home_Team', 'xG_adjusted_home_team', 'home_win', 'home_clean_sheet',
+'Away_Team', 'xG_adjusted_away_team', 'away_win', 'away_clean_sheet']
+matchups[displaycols]
+</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/win_cs_1.png"/></p>
+<pre class="brush: python; title: ; notranslate" title="">
+# Because we put our previous code inside a function, we can easily re-run the function using the bookies' implied totals instead
+matchups2 = win_cs(df=matchups, home_goals_col='Bookies_Home_Goals', away_goals_col='Bookies_Away_Goals')
+
+# Check the results (note how you can re-order the columns)
+displaycols = ['Home_Team', 'Bookies_Home_Goals', 'home_win', 'home_clean_sheet',
+'Away_Team', 'Bookies_Away_Goals', 'away_win', 'away_clean_sheet']
+matchups2[displaycols]
+</pre>
+<p><img alt="" decoding="async" loading="lazy" src="/img/win_cs_2.png"/></p>
+<h1>Conclusion</h1>
+<p>That’s it for now, but feel free to do the following optional extras if you fancy it:</p>
+<ol>
+<li>Work out how often each match goes over 2.5 goals</li>
+<li>Work out how often each team has both a win AND a clean sheet</li>
+<li>Create some plots to visualise the results (see https://seaborn.pydata.org/examples/index.html for inspiration)</li>
+</ol>
+<p>Hint: you can use a similar method to the win_cs function for parts 1 and 2.</p>
+<p>As always, if you enjoyed the article please share it on social media!</p>
+</main>
+<footer>FantasyFutopia, 2017–2019. Archived; no comments, forms or affiliate links.</footer></body></html>
