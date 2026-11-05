@@ -36,5 +36,5 @@ Applied only at launch of the new brand (step 7 of the plan). Targets are **plac
 - Catch-all `/*`: `/` (301).
 
 ## Mechanics
-GitHub Pages cannot send real 301s (stub pages plus 404.html are used today). At launch the new site must serve these as true 301s; `site/_redirects` is the starting list.
+GitHub Pages cannot send real 301s (stub pages plus 404.html are used today). At launch the new site must serve these as true 301s; `docs/_redirects` is the starting list.
 Also at launch: add one line to the `twhelan22/python-for-fantasy-football` README pointing at the new site.

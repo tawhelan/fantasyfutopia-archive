@@ -3,7 +3,7 @@
 import json, glob, os, re, shutil, subprocess, html, sys
 from bs4 import BeautifulSoup
 BK = os.environ.get('BACKUP', os.path.expanduser('~/backup/fantasyfutopia_2026-11-05'))
-OUT = 'site'; HOST = 'https://www.fantasyfutopia.com'
+OUT = 'docs'; HOST = 'https://www.fantasyfutopia.com'
 BANNER = 'This site is archived (2017–2019). Something new is coming.'
 EVERGREEN = ['how-to-play-daily-fantasy-football','per-90-stats-explained','understanding-pick-players-draftkings',
  'set-pieces-daily-fantasy-football','january-transfers-fantasy-perspective','understanding-how-to-pick-yahoo-players',
