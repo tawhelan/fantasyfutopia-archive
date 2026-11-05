@@ -111,5 +111,4 @@ for c,t in rmap.items():
 open(f'{OUT}/404.html','w').write('<!doctype html><meta charset="utf-8"><title>Moved</title><meta name="robots" content="noindex"><script>location.replace("/")</script><p>This page is gone. <a href="/">FantasyFutopia home</a>.</p>')
 with open(f'{OUT}/_redirects','w') as f:
     for c,t in sorted(rmap.items(), key=lambda x:(x[1]!='/',x[0])): f.write(f'{c} {t} 301\n')
-    f.write('/* / 301\n')
 print(len(items),'pages;',len(rmap),'redirects;',len(os.listdir(f'{OUT}/img')),'images')
