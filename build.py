@@ -112,3 +112,9 @@ open(f'{OUT}/404.html','w').write('<!doctype html><meta charset="utf-8"><title>M
 with open(f'{OUT}/_redirects','w') as f:
     for c,t in sorted(rmap.items(), key=lambda x:(x[1]!='/',x[0])): f.write(f'{c} {t} 301\n')
 print(len(items),'pages;',len(rmap),'redirects;',len(os.listdir(f'{OUT}/img')),'images')
+# sitemap + robots so Search Console can recrawl the kept pages
+with open(f'{OUT}/sitemap.xml','w') as f:
+    f.write('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n')
+    for c in ['/']+sorted(kept_paths): f.write(f'<url><loc>{HOST}{c}</loc></url>\n')
+    f.write('</urlset>\n')
+open(f'{OUT}/robots.txt','w').write(f'User-agent: *\nAllow: /\nSitemap: {HOST}/sitemap.xml\n')
